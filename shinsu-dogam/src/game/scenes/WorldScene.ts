@@ -17,6 +17,7 @@ import { audio } from '../../systems/audio.ts';
 import { analytics } from '../../services/analytics/Analytics.ts';
 import { overlayQueue } from '../overlayQueue.ts';
 import { GAME_W, GAME_H, DEBUG } from '../config.ts';
+import { ensureMount } from '../textures.ts';
 import type { GameEvent } from '../../systems/state.ts';
 
 export class WorldScene extends Phaser.Scene {
@@ -99,6 +100,11 @@ export class WorldScene extends Phaser.Scene {
     this.saveT = 30;
     analytics.track('stage_start', { stage: map.id, mount: store.state.data.activeMount });
     this.time.delayedCall(50, () => this.hudTitle(`${map.name} ${map.id}`, map.subtitle));
+    // 보유 영물 애니메이션을 미리 만들어 둔다 (교체 시 끊김 방지, 구간 시작 연출 동안 한 마리씩)
+    store.state.ownedMounts()
+      .filter((m) => m.id !== store.state.data.activeMount)
+      .slice(0, 4)
+      .forEach((m, i) => this.time.delayedCall(700 + i * 300, () => ensureMount(this, m.id, m.stage, m.skin)));
     if (DEBUG) this.setupDebug();
   }
 
