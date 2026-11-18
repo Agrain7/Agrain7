@@ -10,7 +10,8 @@
 - 참고 이미지 2장 분석 → 플레이 화면 기준은 '신수연기' 포스터의 가운데 장면(첨부 순서상 두 번째), 영물은 '영물 도감' 이미지 (PROJECT_PLAN 2절)
 - 기술 스택 확인(npm 레지스트리): Phaser 4.2.1 / Vite 8.3.8 / TypeScript 7.0.2
 - 문서: PROJECT_PLAN, GAME_DESIGN_DOCUMENT, ART_GUIDE, ECONOMY_DESIGN, ASSET_PLAN 외
-- 경제·법률 조사는 별도 조사 작업으로 공식 출처 확인 후 ECONOMY_DESIGN / LEGAL_AND_RELEASE_RESEARCH 에 기록
+- 경제 조사: 별도 조사 작업이 공식 출처(토스페이먼츠·Cloudflare·Supabase·국세청·게임물관리위원회)를 확인해 ECONOMY_DESIGN 작성. 패키지 구성·재화 사용처는 실제 구현에 맞춰 수정
+- 법률 조사: 조사 작업이 문서를 끝내기 전에 중단됨 → LEGAL_AND_RELEASE_RESEARCH 는 '확인 목록'으로 작성 (확정 사항 아님, 출시 전 전문가 확인 필요)
 
 ### PHASE 1 — 플레이 가능한 코어
 - 구현: 2D 횡스크롤 카메라(진행 방향 앞쪽을 넓게, 부드러운 추적), 지형 충돌(Arcade static), 한 방향 발판, 늑대+라이더, 가속·감속 이동, 점프(코요테 타임·입력 버퍼·가변 높이), 착지, 방향 전환, 7겹 패럴랙스, 키보드 + 멀티터치 버튼
