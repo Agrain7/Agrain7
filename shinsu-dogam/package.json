@@ -10,7 +10,8 @@
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "test": "node --test tests/unit/*.test.ts",
-    "test:e2e": "node tests/e2e/smoke.mjs"
+    "test:e2e": "node tests/e2e/smoke.mjs",
+    "build:artifact": "node tools/build-artifact.mjs"
   },
   "dependencies": {
     "@fontsource/gowun-batang": "^5.3.0",
