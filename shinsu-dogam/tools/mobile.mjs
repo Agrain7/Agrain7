@@ -1,0 +1,35 @@
+// 모바일(가로) 화면 + 터치 입력 확인
+import { createRequire } from 'node:module';
+const require = createRequire(import.meta.url);
+const { chromium, devices } = require('playwright');
+const [url, out = '/tmp/claude-0/shots'] = process.argv.slice(2);
+const browser = await chromium.launch({ args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
+const dev = devices['iPhone 13 landscape'] ?? devices['Pixel 7 landscape'];
+const ctx = await browser.newContext({ ...dev });
+const page = await ctx.newPage();
+const errs = [];
+page.on('pageerror', (e) => { errs.push(e.message); console.log('[pageerror]', e.message); });
+await page.goto(url);
+await page.waitForFunction(() => window.__SD_READY__ === true, null, { timeout: 60000 });
+await page.evaluate(() => { const l = window.__SD__.game.loop; setInterval(() => { l.inFocus = true; l._coolDown = 0; }, 100); });
+await page.waitForTimeout(1500);
+const vp = page.viewportSize();
+console.log('viewport', JSON.stringify(vp));
+await page.screenshot({ path: `${out}/mobile_world.png` });
+// 캔버스 좌표 → 화면 좌표 변환 후 오른쪽 버튼 터치
+const box = await page.evaluate(() => { const r = document.querySelector('canvas').getBoundingClientRect(); return { x: r.x, y: r.y, w: r.width, h: r.height }; });
+const P = (gx, gy) => ({ x: box.x + (gx / 1280) * box.w, y: box.y + (gy / 720) * box.h });
+const right = P(222, 720 - 92);
+const before = await page.evaluate(() => window.__SD__.game.scene.getScene('World').player.x);
+const cdp = await ctx.newCDPSession(page);
+await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: right.x, y: right.y, id: 1 }] });
+await page.waitForTimeout(1200);
+const jump = P(1280 - 112, 720 - 96);
+await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: right.x, y: right.y, id: 1 }, { x: jump.x, y: jump.y, id: 2 }] });
+await page.waitForTimeout(250);
+await page.screenshot({ path: `${out}/mobile_jump.png` });
+await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+const after = await page.evaluate(() => window.__SD__.game.scene.getScene('World').player.x);
+console.log('moved by touch:', Math.round(after - before));
+console.log('errors', errs.length);
+await browser.close();

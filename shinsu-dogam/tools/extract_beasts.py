@@ -1,0 +1,169 @@
+#!/usr/bin/env python3
+"""
+영물 도감 원본 일러스트(assets-src/reference/beasts_codex.png)에서
+9종 x 3단계 영물 그림을 잘라 투명 배경 PNG로 저장한다.
+
+사용법:  python3 tools/extract_beasts.py
+출력:    public/assets/mounts/<id>_<stage>.png  (오른쪽을 바라보도록 좌우 반전)
+         public/assets/mounts/beasts.json       (크기 정보)
+         assets-src/beasts_preview.png          (검수용 미리보기)
+
+원본은 사용자 제공 이미지이며, 그림 자체는 수정하지 않고 배경만 제거한다.
+"""
+import json
+import os
+import numpy as np
+from PIL import Image
+from scipy import ndimage
+
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+SRC = os.path.join(ROOT, 'assets-src', 'reference', 'beasts_codex.png')
+OUT = os.path.join(ROOT, 'public', 'assets', 'mounts')
+
+# (id, stage) -> 잘라낼 상자 (x0, y0, x1, y1), 지울 사각형(단계 화살표/테두리)
+BEASTS = {
+    ('cheongryong', 0): {'box': (100, 158, 233, 292)},
+    ('cheongryong', 1): {'box': (254, 118, 449, 298)},
+    ('cheongryong', 2): {'box': (440, 107, 744, 304), 'erase': [(436, 222, 474, 252), (684, 107, 744, 128)]},
+    ('baekho', 0): {'box': (98, 380, 222, 496)},
+    ('baekho', 1): {'box': (238, 352, 426, 501)},
+    ('baekho', 2): {'box': (440, 328, 744, 504)},
+    ('jujak', 0): {'box': (855, 172, 963, 297)},
+    ('jujak', 1): {'box': (968, 124, 1185, 302), 'erase': [(966, 222, 992, 250)]},
+    ('jujak', 2): {'box': (1186, 107, 1516, 304), 'erase': [(1180, 222, 1207, 252), (1452, 107, 1516, 132)]},
+    ('hyeonmu', 0): {'box': (851, 400, 966, 496)},
+    ('hyeonmu', 1): {'box': (994, 344, 1173, 502), 'erase': [(990, 420, 1000, 450)]},
+    ('hyeonmu', 2): {'box': (1203, 327, 1516, 507)},
+    ('girin', 0): {'box': (108, 576, 242, 726)},
+    ('girin', 1): {'box': (258, 534, 451, 730)},
+    ('girin', 2): {'box': (469, 532, 744, 731), 'erase': [(466, 640, 472, 670)]},
+    ('bonghwang', 0): {'box': (103, 820, 206, 940)},
+    ('bonghwang', 1): {'box': (212, 776, 384, 966), 'erase': [(205, 865, 230, 902), (370, 864, 395, 902)]},
+    ('bonghwang', 2): {'box': (392, 754, 662, 990), 'erase': [(624, 952, 680, 1000), (598, 754, 662, 778)]},
+    ('haetae', 0): {'box': (854, 598, 979, 716)},
+    ('haetae', 1): {'box': (996, 562, 1186, 723)},
+    ('haetae', 2): {'box': (1189, 532, 1516, 725), 'erase': [(1184, 638, 1209, 670)]},
+    ('wolf', 0): {'box': (700, 843, 796, 941)},
+    ('wolf', 1): {'box': (796, 820, 922, 939), 'erase': [(794, 888, 813, 914)]},
+    ('wolf', 2): {'box': (916, 796, 1096, 977), 'erase': [(913, 884, 942, 914), (913, 936, 960, 992)]},
+    ('hawk', 0): {'box': (1107, 843, 1193, 933)},
+    ('hawk', 1): {'box': (1196, 816, 1311, 936), 'erase': [(1194, 884, 1212, 912)]},
+    ('hawk', 2): {'box': (1307, 769, 1517, 960), 'erase': [(1305, 884, 1332, 914), (1300, 937, 1367, 992)]},
+}
+
+T_BG = 30.0      # 이 거리 이내 = 확실한 배경
+T_SOFT = 70.0    # 배경~전경 사이 부드러운 경계
+SHADOW_MAX = 85.0  # 배경과 같은 계열(베이지)의 그림자 허용 거리
+
+
+def process(img: np.ndarray, cfg) -> np.ndarray:
+    x0, y0, x1, y1 = cfg['box']
+    crop = img[y0:y1, x0:x1].astype(np.float32)
+    h, w, _ = crop.shape
+    # 지울 사각형은 배경색으로 채움
+    border = np.concatenate([crop[0], crop[-1], crop[:, 0], crop[:, -1]])
+    bg = np.median(border, axis=0)
+    for (ex0, ey0, ex1, ey1) in cfg.get('erase', []):
+        ax0, ay0 = max(0, ex0 - x0), max(0, ey0 - y0)
+        ax1, ay1 = min(w, ex1 - x0), min(h, ey1 - y0)
+        if ax1 > ax0 and ay1 > ay0:
+            crop[ay0:ay1, ax0:ax1] = bg
+    dist = np.sqrt(((crop - bg) ** 2).sum(axis=2))
+    # 그림자: 배경과 비슷한 색조(따뜻한 회갈색), 너무 어둡지 않음
+    lum = crop.mean(axis=2)
+    r, g, b = crop[..., 0], crop[..., 1], crop[..., 2]
+    warm_gray = (r >= g - 4) & (g >= b - 6) & ((r - b) < 60) & (lum > 150)
+    bg_like = (dist < T_BG) | ((dist < SHADOW_MAX) & warm_gray)
+    # 가장자리와 연결된 배경만 제거 (그림 내부의 흰 털은 보존)
+    lab, n = ndimage.label(bg_like)
+    edge_labels = set(np.unique(np.concatenate([lab[0], lab[-1], lab[:, 0], lab[:, -1]]))) - {0}
+    bg_mask = np.isin(lab, list(edge_labels))
+    fg = ~bg_mask
+    # 작은 잡티 제거 + 주 덩어리와 멀리 떨어진 조각 제거
+    lab2, n2 = ndimage.label(fg)
+    if n2:
+        sizes = ndimage.sum(fg, lab2, range(1, n2 + 1))
+        biggest = sizes.max()
+        keep = np.zeros(n2 + 1, bool)
+        for i, s in enumerate(sizes, start=1):
+            keep[i] = s >= max(30, biggest * 0.004)
+        fg = keep[lab2]
+    # 그림 안쪽에 갇힌 종이 영역(갈기·구름 사이 빈틈) 제거:
+    # 종이는 배경색과 매우 가깝고(평균 거리 < 9) 따뜻한 색조(R-B > 24)이며 결이 고르다.
+    # 흰 털(백호, 청룡 갈기)은 이보다 차갑거나 명암이 있어 보존된다.
+    tight = dist < T_BG
+    lab4, n4 = ndimage.label(tight & fg)
+    alpha = fg.astype(np.float32)
+    if n4:
+        idx = np.arange(1, n4 + 1)
+        area = ndimage.sum(np.ones_like(dist), lab4, idx)
+        mean_d = ndimage.mean(dist, lab4, idx)
+        warm = ndimage.mean(crop[..., 0] - crop[..., 2], lab4, idx)
+        std = ndimage.standard_deviation(lum, lab4, idx)
+        paper = np.zeros(n4 + 1, bool)
+        for i in range(n4):
+            if area[i] < 20:
+                continue
+            if (mean_d[i] < 9 and warm[i] > 24 and std[i] < 9) or mean_d[i] < 4.5:
+                paper[i + 1] = True
+        pm = paper[lab4]
+        # 종이 영역 주변 그림자/결 1px까지 함께 제거
+        pm = ndimage.binary_dilation(pm, iterations=1) & (dist < T_SOFT * 0.6)
+        alpha[pm] = 0.0
+    fgm = alpha > 0.5
+    # 부드러운 경계: 배경과 맞닿은 2px 띠에서 색 거리로 알파 계산
+    near_bg = ndimage.binary_dilation(~fgm, iterations=2) & fgm
+    soft = np.clip((dist - T_BG * 0.6) / (T_SOFT - T_BG * 0.6), 0, 1)
+    alpha[near_bg] = np.minimum(alpha[near_bg], soft[near_bg])
+    ring = ndimage.binary_dilation(fgm, iterations=1) & ~fgm
+    alpha[ring] = np.clip(soft[ring] * 0.5, 0, 0.5)
+    # 작은 조각 제거
+    lab3, n3 = ndimage.label(alpha > 0.5)
+    if n3:
+        sizes = ndimage.sum(np.ones_like(alpha), lab3, range(1, n3 + 1))
+        small = np.zeros(n3 + 1, bool)
+        for i, sz in enumerate(sizes, start=1):
+            small[i] = sz < max(25, sizes.max() * 0.003)
+        alpha[small[lab3]] = 0
+    # 색 언프리멀티플라이: c = (c - (1-a)*bg)/a  → 밝은 테두리(헤일로) 제거
+    a3 = alpha[..., None]
+    col = np.where(a3 > 0.02, (crop - (1 - a3) * bg) / np.maximum(a3, 0.02), crop)
+    col = np.clip(col, 0, 255)
+    rgba = np.dstack([col, alpha * 255]).astype(np.uint8)
+    # 투명 여백 잘라내기 (+여백 2px)
+    ys, xs = np.where(alpha > 0.05)
+    if len(xs):
+        rgba = rgba[max(0, ys.min() - 2):ys.max() + 3, max(0, xs.min() - 2):xs.max() + 3]
+    # 오른쪽을 바라보도록 좌우 반전 (원본은 모두 왼쪽을 바라봄)
+    return rgba[:, ::-1]
+
+
+def main():
+    os.makedirs(OUT, exist_ok=True)
+    img = np.array(Image.open(SRC).convert('RGB'))
+    meta = {}
+    tiles = []
+    for (bid, stage), cfg in BEASTS.items():
+        rgba = process(img, cfg)
+        im = Image.fromarray(rgba, 'RGBA')
+        name = f'{bid}_{stage}.png'
+        im.save(os.path.join(OUT, name), optimize=True)
+        meta[f'{bid}_{stage}'] = {'file': f'assets/mounts/{name}', 'w': im.width, 'h': im.height,
+                                  'source': 'assets-src/reference/beasts_codex.png', 'box': cfg['box'], 'mirrored': True}
+        tiles.append((f'{bid}_{stage}', im))
+    with open(os.path.join(OUT, 'beasts.json'), 'w', encoding='utf-8') as f:
+        json.dump(meta, f, ensure_ascii=False, indent=1)
+    # 검수용 미리보기 (어두운 배경 위)
+    cols = 3
+    cw, ch = 340, 220
+    rows = (len(tiles) + cols - 1) // cols
+    sheet = Image.new('RGBA', (cols * cw, rows * ch), (40, 42, 64, 255))
+    for i, (_, im) in enumerate(tiles):
+        cx, cy = (i % cols) * cw, (i // cols) * ch
+        sheet.alpha_composite(im, (cx + (cw - im.width) // 2, cy + (ch - im.height) // 2))
+    sheet.save(os.path.join(ROOT, 'assets-src', 'beasts_preview.png'))
+    print('extracted', len(tiles), 'images ->', OUT)
+
+
+if __name__ == '__main__':
+    main()

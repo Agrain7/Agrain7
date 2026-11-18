@@ -1,0 +1,66 @@
+// 2D 패럴랙스 배경: 하늘(고정) → 달 → 구름 → 원경 산맥 2겹 → 중경 절벽·궁궐·폭포 → 근경 꽃나무 숲
+import Phaser from 'phaser';
+import type { SkyKind } from '../../art/world.ts';
+import { ensureSky } from '../textures.ts';
+import { GAME_W, GAME_H } from '../config.ts';
+
+interface Layer { obj: Phaser.GameObjects.TileSprite; fx: number; fy: number; baseY: number; drift?: number }
+
+const FALLS = [470, 1250];
+
+export class Backdrop {
+  layers: Layer[] = [];
+  moon: Phaser.GameObjects.Image;
+  falls: Phaser.GameObjects.TileSprite[] = [];
+  private cliffs!: Layer;
+  private t = 0;
+
+  private refScrollY: number;
+
+  constructor(scene: Phaser.Scene, sky: SkyKind, refScrollY = 0) {
+    this.refScrollY = refScrollY;
+    ensureSky(scene, sky);
+    const k = (n: string) => `bg_${sky}_${n}`;
+    scene.add.image(0, 0, k('sky')).setOrigin(0).setScrollFactor(0).setDepth(-100).setDisplaySize(GAME_W, GAME_H);
+    this.moon = scene.add.image(900, 170, k('moon')).setScrollFactor(0).setDepth(-99).setScale(sky === 'mist' ? 0.6 : 0.85).setAlpha(sky === 'mist' ? 0.7 : 1);
+    const add = (key: string, y: number, h: number, fx: number, fy: number, depth: number, drift = 0) => {
+      const obj = scene.add.tileSprite(0, y, GAME_W, h, key).setOrigin(0).setScrollFactor(0).setDepth(depth);
+      const L = { obj, fx, fy, baseY: y, drift };
+      this.layers.push(L);
+      return L;
+    };
+    add(k('clouds'), 30, 260, 0.04, 0.02, -98, 6);
+    add(k('mount0'), 120, 460, 0.08, 0.05, -97);
+    add(k('mount1'), 190, 460, 0.16, 0.1, -96);
+    this.cliffs = add(k('cliffs'), 150, 620, 0.32, 0.2, -95);
+    for (let i = 0; i < 4; i++) {
+      const f = scene.add.tileSprite(0, 0, 70, 520, 'waterfall').setOrigin(0.5, 0).setScrollFactor(0).setDepth(-94.5).setAlpha(0.9);
+      this.falls.push(f);
+    }
+    add(k('grove'), 330, 440, 0.6, 0.4, -93);
+  }
+
+  update(camX: number, camY: number, dt: number) {
+    this.t += dt;
+    const dy = this.refScrollY - camY;
+    for (const L of this.layers) {
+      L.obj.tilePositionX = camX * L.fx + (L.drift ? this.t * L.drift : 0);
+      L.obj.y = L.baseY + dy * L.fy;
+    }
+    this.moon.x = 900 - camX * 0.01;
+    this.moon.y = 170 + dy * 0.02;
+    // 폭포: 절벽 레이어와 같은 속도로 이동
+    const off = (camX * this.cliffs.fx) % 2048;
+    let i = 0;
+    for (const rep of [0, 2048]) {
+      for (const fxp of FALLS) {
+        const f = this.falls[i++];
+        if (!f) continue;
+        f.x = fxp + rep - off;
+        f.y = this.cliffs.obj.y + 230;
+        f.tilePositionY -= dt * 260;
+        f.setVisible(f.x > -80 && f.x < GAME_W + 80);
+      }
+    }
+  }
+}

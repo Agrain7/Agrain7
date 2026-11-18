@@ -1,0 +1,353 @@
+{
+ "cheongryong_0": {
+  "file": "assets/mounts/cheongryong_0.png",
+  "w": 129,
+  "h": 123,
+  "source": "assets-src/reference/beasts_codex.png",
+  "box": [
+   100,
+   158,
+   233,
+   292
+  ],
+  "mirrored": true
+ },
+ "cheongryong_1": {
+  "file": "assets/mounts/cheongryong_1.png",
+  "w": 195,
+  "h": 173,
+  "source": "assets-src/reference/beasts_codex.png",
+  "box": [
+   254,
+   118,
+   449,
+   298
+  ],
+  "mirrored": true
+ },
+ "cheongryong_2": {
+  "file": "assets/mounts/cheongryong_2.png",
+  "w": 304,
+  "h": 197,
+  "source": "assets-src/reference/beasts_codex.png",
+  "box": [
+   440,
+   107,
+   744,
+   304
+  ],
+  "mirrored": true
+ },
+ "baekho_0": {
+  "file": "assets/mounts/baekho_0.png",
+  "w": 117,
+  "h": 111,
+  "source": "assets-src/reference/beasts_codex.png",
+  "box": [
+   98,
+   380,
+   222,
+   496
+  ],
+  "mirrored": true
+ },
+ "baekho_1": {
+  "file": "assets/mounts/baekho_1.png",
+  "w": 186,
+  "h": 143,
+  "source": "assets-src/reference/beasts_codex.png",
+  "box": [
+   238,
+   352,
+   426,
+   501
+  ],
+  "mirrored": true
+ },
+ "baekho_2": {
+  "file": "assets/mounts/baekho_2.png",
+  "w": 304,
+  "h": 176,
+  "source": "assets-src/reference/beasts_codex.png",
+  "box": [
+   440,
+   328,
+   744,
+   504
+  ],
+  "mirrored": true
+ },
+ "jujak_0": {
+  "file": "assets/mounts/jujak_0.png",
+  "w": 108,
+  "h": 120,
+  "source": "assets-src/reference/beasts_codex.png",
+  "box": [
+   855,
+   172,
+   963,
+   297
+  ],
+  "mirrored": true
+ },
+ "jujak_1": {
+  "file": "assets/mounts/jujak_1.png",
+  "w": 216,
+  "h": 173,
+  "source": "assets-src/reference/beasts_codex.png",
+  "box": [
+   968,
+   124,
+   1185,
+   302
+  ],
+  "mirrored": true
+ },
+ "jujak_2": {
+  "file": "assets/mounts/jujak_2.png",
+  "w": 329,
+  "h": 197,
+  "source": "assets-src/reference/beasts_codex.png",
+  "box": [
+   1186,
+   107,
+   1516,
+   304
+  ],
+  "mirrored": true
+ },
+ "hyeonmu_0": {
+  "file": "assets/mounts/hyeonmu_0.png",
+  "w": 110,
+  "h": 88,
+  "source": "assets-src/reference/beasts_codex.png",
+  "box": [
+   851,
+   400,
+   966,
+   496
+  ],
+  "mirrored": true
+ },
+ "hyeonmu_1": {
+  "file": "assets/mounts/hyeonmu_1.png",
+  "w": 176,
+  "h": 153,
+  "source": "assets-src/reference/beasts_codex.png",
+  "box": [
+   994,
+   344,
+   1173,
+   502
+  ],
+  "mirrored": true
+ },
+ "hyeonmu_2": {
+  "file": "assets/mounts/hyeonmu_2.png",
+  "w": 313,
+  "h": 180,
+  "source": "assets-src/reference/beasts_codex.png",
+  "box": [
+   1203,
+   327,
+   1516,
+   507
+  ],
+  "mirrored": true
+ },
+ "girin_0": {
+  "file": "assets/mounts/girin_0.png",
+  "w": 124,
+  "h": 144,
+  "source": "assets-src/reference/beasts_codex.png",
+  "box": [
+   108,
+   576,
+   242,
+   726
+  ],
+  "mirrored": true
+ },
+ "girin_1": {
+  "file": "assets/mounts/girin_1.png",
+  "w": 192,
+  "h": 192,
+  "source": "assets-src/reference/beasts_codex.png",
+  "box": [
+   258,
+   534,
+   451,
+   730
+  ],
+  "mirrored": true
+ },
+ "girin_2": {
+  "file": "assets/mounts/girin_2.png",
+  "w": 273,
+  "h": 199,
+  "source": "assets-src/reference/beasts_codex.png",
+  "box": [
+   469,
+   532,
+   744,
+   731
+  ],
+  "mirrored": true
+ },
+ "bonghwang_0": {
+  "file": "assets/mounts/bonghwang_0.png",
+  "w": 95,
+  "h": 111,
+  "source": "assets-src/reference/beasts_codex.png",
+  "box": [
+   103,
+   820,
+   206,
+   940
+  ],
+  "mirrored": true
+ },
+ "bonghwang_1": {
+  "file": "assets/mounts/bonghwang_1.png",
+  "w": 171,
+  "h": 188,
+  "source": "assets-src/reference/beasts_codex.png",
+  "box": [
+   212,
+   776,
+   384,
+   966
+  ],
+  "mirrored": true
+ },
+ "bonghwang_2": {
+  "file": "assets/mounts/bonghwang_2.png",
+  "w": 270,
+  "h": 236,
+  "source": "assets-src/reference/beasts_codex.png",
+  "box": [
+   392,
+   754,
+   662,
+   990
+  ],
+  "mirrored": true
+ },
+ "haetae_0": {
+  "file": "assets/mounts/haetae_0.png",
+  "w": 122,
+  "h": 112,
+  "source": "assets-src/reference/beasts_codex.png",
+  "box": [
+   854,
+   598,
+   979,
+   716
+  ],
+  "mirrored": true
+ },
+ "haetae_1": {
+  "file": "assets/mounts/haetae_1.png",
+  "w": 188,
+  "h": 151,
+  "source": "assets-src/reference/beasts_codex.png",
+  "box": [
+   996,
+   562,
+   1186,
+   723
+  ],
+  "mirrored": true
+ },
+ "haetae_2": {
+  "file": "assets/mounts/haetae_2.png",
+  "w": 327,
+  "h": 193,
+  "source": "assets-src/reference/beasts_codex.png",
+  "box": [
+   1189,
+   532,
+   1516,
+   725
+  ],
+  "mirrored": true
+ },
+ "wolf_0": {
+  "file": "assets/mounts/wolf_0.png",
+  "w": 92,
+  "h": 78,
+  "source": "assets-src/reference/beasts_codex.png",
+  "box": [
+   700,
+   843,
+   796,
+   941
+  ],
+  "mirrored": true
+ },
+ "wolf_1": {
+  "file": "assets/mounts/wolf_1.png",
+  "w": 124,
+  "h": 110,
+  "source": "assets-src/reference/beasts_codex.png",
+  "box": [
+   796,
+   820,
+   922,
+   939
+  ],
+  "mirrored": true
+ },
+ "wolf_2": {
+  "file": "assets/mounts/wolf_2.png",
+  "w": 180,
+  "h": 180,
+  "source": "assets-src/reference/beasts_codex.png",
+  "box": [
+   916,
+   796,
+   1096,
+   977
+  ],
+  "mirrored": true
+ },
+ "hawk_0": {
+  "file": "assets/mounts/hawk_0.png",
+  "w": 81,
+  "h": 84,
+  "source": "assets-src/reference/beasts_codex.png",
+  "box": [
+   1107,
+   843,
+   1193,
+   933
+  ],
+  "mirrored": true
+ },
+ "hawk_1": {
+  "file": "assets/mounts/hawk_1.png",
+  "w": 112,
+  "h": 113,
+  "source": "assets-src/reference/beasts_codex.png",
+  "box": [
+   1196,
+   816,
+   1311,
+   936
+  ],
+  "mirrored": true
+ },
+ "hawk_2": {
+  "file": "assets/mounts/hawk_2.png",
+  "w": 210,
+  "h": 191,
+  "source": "assets-src/reference/beasts_codex.png",
+  "box": [
+   1307,
+   769,
+   1517,
+   960
+  ],
+  "mirrored": true
+ }
+}
