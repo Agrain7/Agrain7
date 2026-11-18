@@ -8,6 +8,8 @@ import { ensureMount, ensureRider } from '../textures.ts';
 import { MOUNT_ART, artKey } from '../../data/mountArt.ts';
 import { audio } from '../../systems/audio.ts';
 import { analytics } from '../../services/analytics/Analytics.ts';
+import { applyPlaytestGift, PLAYTEST_GIFT_ID } from '../../systems/playtestGift.ts';
+import { panel } from '../../ui/widgets.ts';
 
 export class TitleScene extends Phaser.Scene {
   private bd!: Backdrop;
@@ -67,15 +69,35 @@ export class TitleScene extends Phaser.Scene {
       x: { min: 0, max: GAME_W }, y: -20, lifespan: 9000, speedY: { min: 30, max: 70 }, speedX: { min: -40, max: 10 },
       rotate: { min: 0, max: 360 }, scale: { min: 0.6, max: 1.1 }, frequency: 260, alpha: 0.9,
     }).setDepth(50);
+    if (store.giftJustApplied) {
+      store.giftJustApplied = false;
+      this.giftNotice();
+    }
     this.input.once('pointerdown', () => audio.unlock());
     this.input.keyboard?.once('keydown', () => audio.unlock());
     void COLORS;
+  }
+
+  private giftNotice() {
+    const layer = this.add.container(0, 0).setDepth(3000);
+    const dim = this.add.rectangle(0, 0, GAME_W, GAME_H, 0x000000, 0.55).setOrigin(0).setInteractive();
+    const p = panel(this, GAME_W / 2 - 330, GAME_H / 2 - 170, 660, 340);
+    const t1 = txt(this, GAME_W / 2, GAME_H / 2 - 120, '선물이 도착했어요!', 34, COLORS.text, { title: true }).setOrigin(0.5);
+    const t2 = txt(this, GAME_W / 2, GAME_H / 2 - 60, [
+      '늑대가 각성체(Lv.30)로 진화했어요.',
+      '주작 각성체(Lv.30)가 합류했어요 — 지금 주작에 타고 있어요.',
+      '공중에서 점프를 한 번 더 누르면 자유 비행!',
+      '(점프 유지 = 상승, 아래 = 하강 · Q로 영물 교체)',
+    ].join('\n'), 20, '#3a2a2a', { align: 'center', lineSpacing: 8 }).setOrigin(0.5, 0);
+    const ok = button(this, GAME_W / 2, GAME_H / 2 + 120, 200, 56, '확인', () => layer.destroy(), 'primary', 22);
+    layer.add([dim, p, t1, t2, ok]);
   }
 
   private go(fresh: boolean) {
     audio.unlock();
     if (fresh) {
       store.state.reset();
+      applyPlaytestGift(store.state, PLAYTEST_GIFT_ID);
       store.state.save();
       analytics.track('game_start', { fresh: true });
       this.scene.start('Intro');

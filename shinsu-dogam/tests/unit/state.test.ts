@@ -11,6 +11,7 @@ import { MOUNT_ART } from '../../src/data/mountArt.ts';
 import { ITEMS } from '../../src/data/items.ts';
 import { QUESTS } from '../../src/data/quests.ts';
 import { SERVER_PRICES } from '../../functions/api/_shared.ts';
+import { applyPlaytestGift } from '../../src/systems/playtestGift.ts';
 
 class MemStorage implements StorageLike {
   m = new Map<string, string>();
@@ -232,4 +233,22 @@ test('하루 결제 한도: 5만 원 미만까지만 허용, 환불분·다른 �
   assert.ok(g.canSpend(14900, now));
   assert.equal(g.canSpend(19900, now), false);
   assert.equal(DAILY_PURCHASE_LIMIT, 50000);
+});
+
+test('플레이테스트 선물: 늑대 각성체 + 주작 각성체, 저장 데이터당 한 번, id 없으면 지급 안 함', () => {
+  const g = new GameState(null);
+  assert.equal(applyPlaytestGift(g, undefined), false);
+  assert.equal(g.owns('jujak'), false);
+  g.data.mounts.wolf!.level = 4;
+  assert.ok(applyPlaytestGift(g, 'gift-1'));
+  assert.equal(g.data.mounts.wolf!.stage, 2);
+  assert.equal(g.data.mounts.wolf!.level, 30);
+  assert.deepEqual(g.data.mounts.wolf!.history.map((h) => h.stage), [0, 1, 2]);
+  assert.equal(g.data.mounts.jujak!.stage, 2);
+  assert.ok(MOUNTS.jujak.stages[2].movement.flight, '주작 각성체는 자유 비행');
+  assert.equal(g.data.activeMount, 'jujak');
+  assert.equal(applyPlaytestGift(g, 'gift-1'), false, '같은 선물은 한 번만');
+  // 구버전 저장(gifts 필드 없음)도 처리
+  const old = migrate({ version: 1, mounts: { wolf: { id: 'wolf', level: 2, exp: 0, stage: 0, obtainedAt: 1 } } });
+  assert.deepEqual(old.gifts, []);
 });

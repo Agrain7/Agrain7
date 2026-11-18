@@ -38,6 +38,8 @@ export interface SaveData {
   purchases: { orderId: string; productId: string; price: number; at: number; test: boolean; status: 'paid' | 'refunded' }[];
   settings: { music: number; sfx: number; touch: 'auto' | 'on' | 'off'; showFps: boolean };
   tutorialDone: boolean;
+  /** 적용된 선물(플레이테스트 지급) id */
+  gifts: string[];
 }
 
 export function expToNext(level: number): number {
@@ -68,6 +70,7 @@ export function newSave(now = Date.now()): SaveData {
     purchases: [],
     settings: { music: 0.5, sfx: 0.7, touch: 'auto', showFps: false },
     tutorialDone: false,
+    gifts: [],
   };
 }
 
