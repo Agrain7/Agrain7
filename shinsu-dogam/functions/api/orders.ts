@@ -7,6 +7,7 @@ export const onRequestPost = async ({ request, env }: { request: Request; env: E
   if (!price) return json({ error: 'unknown product' }, 400);
   const orderId = `SD-${Date.now()}-${crypto.randomUUID().slice(0, 8)}`;
   // TODO(출시 전): 로그인 사용자 id를 주문에 연결 (Supabase Auth 등)
+  // TODO(출시 전): 사용자별 하루 누적 결제가 5만 원 미만인지 서버에서 확인 (토스 게임 업종 기준 — 계약 시 재확인)
   await env.ORDERS.put(orderId, JSON.stringify({ productId, amount: price.amount, status: 'created', createdAt: Date.now() }));
   return json({ orderId, productId, amount: price.amount, orderName: price.name });
 };

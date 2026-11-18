@@ -1,7 +1,7 @@
 // 게임 진행 로직 단위 테스트 (node --test, Node 22.18+ 타입 제거 기능 사용)
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { GameState, newSave, migrate, expToNext, STONE_EXP, SAVE_KEY, type StorageLike } from '../../src/systems/state.ts';
+import { GameState, newSave, migrate, expToNext, STONE_EXP, SAVE_KEY, DAILY_PURCHASE_LIMIT, type StorageLike } from '../../src/systems/state.ts';
 import { MOUNTS, MOUNT_ORDER, SKILLS, mountStats } from '../../src/data/mounts.ts';
 import { PRODUCTS } from '../../src/data/products.ts';
 import { COSMETICS } from '../../src/data/cosmetics.ts';
@@ -219,4 +219,17 @@ test('퀘스트 보상 참조 유효', () => {
     for (const k of Object.keys(q.reward.items ?? {})) assert.ok(ITEMS[k], `${q.id} → ${k}`);
     if (q.reward.mount) assert.ok(MOUNTS[q.reward.mount]);
   }
+});
+
+test('하루 결제 한도: 5만 원 미만까지만 허용, 환불분·다른 날은 제외', () => {
+  const g = new GameState(null);
+  const now = new Date('2026-11-18T12:00:00').getTime();
+  g.data.purchases.push({ orderId: 'a', productId: 'p_pkg_premium', price: 19900, at: now - 1000, test: true, status: 'paid' });
+  g.data.purchases.push({ orderId: 'b', productId: 'p_pkg_special', price: 12900, at: now - 2000, test: true, status: 'paid' });
+  g.data.purchases.push({ orderId: 'c', productId: 'p_skin_cr_gold', price: 14900, at: now - 3000, test: true, status: 'refunded' });
+  g.data.purchases.push({ orderId: 'd', productId: 'p_skin_cr_gold', price: 14900, at: now - 86400000 * 2, test: true, status: 'paid' });
+  assert.equal(g.spentToday(now), 32800);
+  assert.ok(g.canSpend(14900, now));
+  assert.equal(g.canSpend(19900, now), false);
+  assert.equal(DAILY_PURCHASE_LIMIT, 50000);
 });

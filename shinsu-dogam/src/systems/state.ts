@@ -45,6 +45,8 @@ export function expToNext(level: number): number {
 }
 
 export const MAX_LEVEL = 40;
+/** 계정당 하루 누적 결제 한도 (원). 토스페이먼츠 게임 업종 심사 기준 '1일 5만 원 미만' 안내에 맞춤 — 계약 시 재확인 */
+export const DAILY_PURCHASE_LIMIT = 50000;
 export const STONE_EXP = 60;
 
 export function newSave(now = Date.now()): SaveData {
@@ -391,6 +393,17 @@ export class GameState {
       { id: 'a_boss', name: '월하의 수호자', desc: '흑운 산군 정화', done: d.stats.bosses.includes('boss') },
       { id: 'a_lore', name: '고서 수집가', desc: '고서 조각 5장 수집', done: d.lorePages.length >= 5 },
     ];
+  }
+
+  // ---------- 결제 한도 ----------
+  /** 오늘(로컬 날짜) 결제 완료된 금액 합계 */
+  spentToday(now = Date.now()): number {
+    const d = new Date(now).toDateString();
+    return this.data.purchases.filter((p) => p.status === 'paid' && new Date(p.at).toDateString() === d).reduce((a, p) => a + p.price, 0);
+  }
+  /** 이 금액을 더 결제해도 하루 한도(5만 원 미만)를 지키는가 */
+  canSpend(price: number, now = Date.now()): boolean {
+    return this.spentToday(now) + price < DAILY_PURCHASE_LIMIT;
   }
 
   // ---------- 꾸미기 ----------

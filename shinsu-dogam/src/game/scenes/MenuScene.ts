@@ -381,6 +381,10 @@ export class MenuScene extends Phaser.Scene {
     const st = store.state;
     const p = PRODUCTS.find((x) => x.id === productId);
     if (!p) return;
+    if (!st.canSpend(p.price)) {
+      toast(this, `하루 결제 한도(5만 원 미만)를 넘을 수 없어요. 오늘 결제: ${st.spentToday().toLocaleString('ko-KR')}원`, '#ffb0a0', 120, 2600);
+      return;
+    }
     confirmBox(this, `${p.name}\n${p.price.toLocaleString('ko-KR')}원 (부가세 포함)\n\n테스트 모드: 실제로 청구되지 않습니다.`, async () => {
       analytics.track('purchase_start', { product: p.id, price: p.price, mode: payments.mode });
       const order = await payments.createOrder(p);
