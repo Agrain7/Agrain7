@@ -87,7 +87,7 @@ try {
   check('다음 구간(1-2) 시작', (await world(page, (w) => w.map.id)) === '1-2');
   // 전투: 첫 산돼지 옆으로 이동해 공격
   await world(page, (w) => { const m = w.monsters[0]; w.player.body.reset(m.x - 90, m.body.bottom - 40); w.player.facing = 1; return 1; });
-  for (let i = 0; i < 8; i++) { await page.keyboard.press('j'); await sleep(380); }
+  for (let i = 0; i < 14; i++) { await page.keyboard.press('j'); await sleep(380); if (await world(page, (w, s) => s.data.stats.defeats >= 1)) break; }
   const st = await world(page, (w, s) => ({ defeats: s.data.stats.defeats, exp: s.active.exp, lv: s.active.level, m0: w.monsters[0]?.dead ?? true }));
   check('몬스터 처치 + 경험치', st.defeats >= 1 && (st.exp > 0 || st.lv > 1), JSON.stringify(st));
   await page.screenshot({ path: `${OUT}/05_combat.png` });
@@ -107,8 +107,26 @@ try {
   await sleep(1200);
   const bought = await page.evaluate(() => window.__SD__.store.state.data.purchases.length);
   check('상점 테스트 구매 (실결제 없음)', bought === 1, `구매 ${bought}건`);
+  const equipped = await page.evaluate(() => window.__SD__.store.state.data.mounts.wolf?.skin);
+  check('구매한 스킨 바로 장착', equipped === 'skin_wolf_snow', String(equipped));
+  await page.mouse.click(640, 480); // 구매 완료 안내 닫기
+  await sleep(300);
   await page.keyboard.press('Escape');
   await sleep(500);
+  // 원거리 공격 (적이 멀면 자동 발사) + 필살기
+  await world(page, (w) => { w.player.body.reset(300, 820); w.player.facing = 1; w.player.attackCD = 0; return 1; });
+  await sleep(300);
+  await page.keyboard.press('j');
+  await sleep(120);
+  const proj = await world(page, (w) => w.combat.projs.filter((p) => !p.hostile).length);
+  check('원거리 공격 발사', proj >= 1, `투사체 ${proj}개`);
+  await world(page, (w) => { w.player.ult = 100; return 1; });
+  await page.keyboard.press('u');
+  await sleep(2600);
+  const ult = await world(page, (w) => ({ ult: Math.round(w.player.ult), freeze: w.freezeT <= 0 }));
+  check('필살기 발동 (게이지 소모)', ult.ult < 30 && ult.freeze, JSON.stringify(ult));
+  await page.screenshot({ path: `${OUT}/06b_ultimate.png` });
+  await sleep(1500);
   // 진화 + 청룡 비행 (데이터 조작으로 빠르게 확인)
   await world(page, (w, s) => { s.obtainMount('cheongryong'); return 1; });
   await sleep(900);
@@ -122,6 +140,8 @@ try {
     await page.mouse.click(640, 640);
     await sleep(800);
   }
+  await world(page, (w) => { w.player.body.reset(500, 800); return 1; });
+  await sleep(600);
   const y0 = await world(page, (w) => w.player.y);
   await page.keyboard.press('Space');
   await sleep(200);
@@ -154,7 +174,7 @@ try {
   await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
   const mx1 = await world(m.page, (w) => w.player.x);
   check('모바일 터치 이동', mx1 - mx0 > 120, `${Math.round(mx1 - mx0)}px`);
-  const touchVisible = await m.page.evaluate(() => window.__SD__.game.scene.getScene('Hud').touchOn);
+  const touchVisible = await m.page.evaluate(() => window.__SD__.game.scene.getScene('Hud').showBtns);
   check('모바일 터치 버튼 표시', touchVisible === true);
   await m.page.screenshot({ path: `${OUT}/08_mobile.png` });
   check('모바일 실행 중 오류 없음', m.errors.length === 0, m.errors.slice(0, 3).join(' | '));

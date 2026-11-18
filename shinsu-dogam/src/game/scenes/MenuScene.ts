@@ -357,10 +357,24 @@ export class MenuScene extends Phaser.Scene {
       this.t(c, x + 150, y + 56, p.tier, 14, p.tier === '프리미엄' ? '#c3352c' : '#7a5a3a');
       this.t(c, x + 150, y + 76, `${p.price.toLocaleString('ko-KR')}원`, 20, '#3a2a2a', { title: true });
       this.t(c, x + 12, y + 128, p.desc, 13, '#5a4a3a', { wordWrap: { width: 150 } });
-      const label = !p.available ? '출시 예정' : ownedAll || bought ? '보유 중' : '구매';
-      const b = button(this, x + 222, y + 150, 112, 38, label, () => this.buy(p.id), 'primary', 15);
-      b.setEnabled(p.available && !ownedAll && !bought);
-      c.add(b);
+      const needMount = p.category === 'skin' && p.mount && !st.owns(p.mount);
+      if (ownedAll && p.grants.length === 1) {
+        // 보유한 단품: 바로 장착/해제
+        const on = st.isEquipped(p.grants[0]);
+        const b = button(this, x + 222, y + 150, 112, 38, on ? '✓ 장착 중' : '장착하기', () => {
+          st.equip(p.grants[0]);
+          if (COSMETICS[p.grants[0]]?.kind === 'outfit') ensureRider(this, p.grants[0]);
+          st.save();
+          this.applyToWorld();
+          this.render();
+        }, on ? 'primary' : 'normal', 15);
+        c.add(b);
+      } else {
+        const label = !p.available ? '출시 예정' : ownedAll || bought ? '보유 중' : needMount ? '영물 필요' : '구매';
+        const b = button(this, x + 222, y + 150, 112, 38, label, () => this.buy(p.id), 'primary', 15);
+        b.setEnabled(p.available && !ownedAll && !bought && !needMount);
+        c.add(b);
+      }
     });
     // 구매 내역
     const hy = Y0 + H - 110;
@@ -392,13 +406,37 @@ export class MenuScene extends Phaser.Scene {
       if (res.ok) {
         st.grantCosmetics(p.grants);
         st.data.purchases.push({ orderId: order.orderId, productId: p.id, price: p.price, at: Date.now(), test: res.test, status: 'paid' });
+        const eq = st.autoEquip(p.grants);
+        for (const g of eq.equipped) if (COSMETICS[g]?.kind === 'outfit') ensureRider(this, g);
         st.save();
+        this.applyToWorld();
         analytics.track('purchase_success', { product: p.id, price: p.price, test: res.test });
         audio.play('chest');
-        toast(this, `${p.name} 구매 완료! (테스트)`, '#ffe6a6', 120);
         this.render();
+        this.purchaseDone(p.name, eq);
       } else toast(this, res.message ?? '결제 실패', '#ffb0a0', 120);
     }, '테스트 구매');
+  }
+
+  /** 플레이 중에 연 메뉴라면 영물·라이더 외형을 즉시 다시 그린다 */
+  private applyToWorld() {
+    if (this.from !== 'World') return;
+    const w = this.scene.get('World') as WorldScene;
+    w.player?.rebuild();
+  }
+
+  /** 구매 완료 안내: 무엇이 장착됐는지 보여 준다 */
+  private purchaseDone(name: string, eq: { equipped: string[]; needMount: MountId[] }) {
+    const layer = this.add.container(0, 0).setDepth(2000);
+    const dim = this.add.rectangle(0, 0, GAME_W, GAME_H, 0x000000, 0.55).setOrigin(0).setInteractive();
+    const pnl = panel(this, GAME_W / 2 - 280, GAME_H / 2 - 160, 560, 320);
+    const lines = eq.equipped.map((id) => `✓ ${COSMETICS[id]?.name ?? id} — 장착했어요`);
+    for (const m of eq.needMount) lines.push(`※ ${MOUNTS[m].name}을(를) 얻으면 이 스킨을 장착할 수 있어요`);
+    const t1 = txt(this, GAME_W / 2, GAME_H / 2 - 112, `${name} 구매 완료!`, 30, COLORS.text, { title: true }).setOrigin(0.5);
+    const t2 = txt(this, GAME_W / 2, GAME_H / 2 - 60, lines.join('\n'), 19, '#3a2a2a', { align: 'center', lineSpacing: 8 }).setOrigin(0.5, 0);
+    const t3 = txt(this, GAME_W / 2, GAME_H / 2 + 74, '테스트 결제 · 실제 청구 없음 · 영물 탭에서 바꿔 낄 수 있어요', 14, '#7a5a3a').setOrigin(0.5);
+    const ok = button(this, GAME_W / 2, GAME_H / 2 + 120, 180, 50, '확인', () => layer.destroy(), 'primary');
+    layer.add([dim, pnl, t1, t2, t3, ok]);
   }
 
   private refund(orderId: string) {

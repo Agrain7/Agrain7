@@ -1,8 +1,8 @@
 // 키보드 + 터치 입력 통합. 터치 버튼(HUD)은 hold 상태를 직접 기록하고, 여기서 눌림(edge)을 계산한다.
 import Phaser from 'phaser';
 
-export type Btn = 'left' | 'right' | 'up' | 'down' | 'jump' | 'attack' | 'special' | 'dash' | 'menu' | 'swap';
-const BTNS: Btn[] = ['left', 'right', 'up', 'down', 'jump', 'attack', 'special', 'dash', 'menu', 'swap'];
+export type Btn = 'left' | 'right' | 'up' | 'down' | 'jump' | 'attack' | 'special' | 'ult' | 'dash' | 'menu' | 'swap';
+const BTNS: Btn[] = ['left', 'right', 'up', 'down', 'jump', 'attack', 'special', 'ult', 'dash', 'menu', 'swap'];
 
 export class Controls {
   held: Record<Btn, boolean> = Object.fromEntries(BTNS.map((b) => [b, false])) as Record<Btn, boolean>;
@@ -20,7 +20,7 @@ export class Controls {
     const K = Phaser.Input.Keyboard.KeyCodes;
     const map: Record<Btn, number[]> = {
       left: [K.A, K.LEFT], right: [K.D, K.RIGHT], up: [K.W, K.UP], down: [K.S, K.DOWN],
-      jump: [K.SPACE], attack: [K.J, K.Z], special: [K.K, K.X], dash: [K.L, K.SHIFT, K.C], menu: [K.ESC, K.P], swap: [K.Q, K.TAB],
+      jump: [K.SPACE], attack: [K.J, K.Z], special: [K.K, K.X], ult: [K.U, K.I, K.V], dash: [K.L, K.SHIFT, K.C], menu: [K.ESC, K.P], swap: [K.Q, K.TAB],
     };
     for (const b of BTNS) this.keys[b] = map[b].map((code) => kb.addKey(code, true, false));
   }

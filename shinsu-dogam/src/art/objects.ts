@@ -547,3 +547,171 @@ export function paintItemIcon(id: string): HTMLCanvasElement {
   }
   return c;
 }
+
+// ---------------- 원거리·필살기 효과 ----------------
+/** 초승달 참격 (늑대) */
+export function paintCrescent(): HTMLCanvasElement {
+  const [c, ctx] = makeCanvas(120, 120);
+  ctx.translate(60, 60);
+  glow(ctx, 6, 0, 56, '#9fe3ff', 0.55);
+  for (let k = 0; k < 3; k++) {
+    ctx.beginPath();
+    ctx.arc(-6, 0, 48 - k * 6, -1.25, 1.25);
+    ctx.arc(-26 - k * 3, 0, 42 - k * 6, 1.05, -1.05, true);
+    ctx.closePath();
+    ctx.fillStyle = k === 2 ? '#ffffff' : rgba(k ? '#bff0ff' : '#5fb8ff', 0.8);
+    ctx.fill();
+  }
+  return c;
+}
+
+/** 번개 구슬 (청룡) */
+export function paintThunderBall(): HTMLCanvasElement {
+  const [c, ctx] = makeCanvas(72, 72);
+  glow(ctx, 36, 36, 36, '#7fd6ff', 0.9);
+  circle(ctx, 36, 36, 13, '#e8fbff');
+  const r = rng(7);
+  ctx.strokeStyle = '#ffffff';
+  ctx.lineWidth = 2;
+  for (let k = 0; k < 6; k++) {
+    const a = (k / 6) * TAU + r();
+    ctx.beginPath();
+    ctx.moveTo(36, 36);
+    let x = 36, y = 36;
+    for (let j = 0; j < 3; j++) { x += Math.cos(a + (r() - 0.5)) * 8; y += Math.sin(a + (r() - 0.5)) * 8; ctx.lineTo(x, y); }
+    ctx.stroke();
+  }
+  return c;
+}
+
+/** 땅을 타고 가는 금빛 발톱 파동 (백호) */
+export function paintClawWave(): HTMLCanvasElement {
+  const [c, ctx] = makeCanvas(110, 90);
+  glow(ctx, 60, 70, 50, '#ffe08a', 0.6);
+  for (let k = 0; k < 3; k++) {
+    ctx.beginPath();
+    const x = 30 + k * 22;
+    ctx.moveTo(x - 10, 88); ctx.quadraticCurveTo(x + 4, 50, x + 18 - k * 2, 6 + k * 8); ctx.quadraticCurveTo(x + 10, 50, x + 8, 88); ctx.closePath();
+    const g = ctx.createLinearGradient(0, 0, 0, 90);
+    g.addColorStop(0, '#ffffff'); g.addColorStop(0.5, '#ffe08a'); g.addColorStop(1, '#c99a43');
+    ctx.fillStyle = g; ctx.fill();
+    ctx.strokeStyle = '#7a5a1e'; ctx.lineWidth = 1.2; ctx.stroke();
+  }
+  return c;
+}
+
+/** 쇠 칼날 (백호 필살기) */
+export function paintSpike(): HTMLCanvasElement {
+  const [c, ctx] = makeCanvas(60, 160);
+  glow(ctx, 30, 120, 40, '#ffe8a8', 0.5);
+  ctx.beginPath(); ctx.moveTo(30, 0); ctx.lineTo(48, 160); ctx.lineTo(12, 160); ctx.closePath();
+  const g = ctx.createLinearGradient(12, 0, 48, 0);
+  g.addColorStop(0, '#f6f2e6'); g.addColorStop(0.5, '#bcc4d4'); g.addColorStop(1, '#6a7286');
+  ctx.fillStyle = g; ctx.fill();
+  ctx.strokeStyle = '#2a2a3a'; ctx.lineWidth = 2; ctx.stroke();
+  ctx.strokeStyle = '#e2b14c'; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(16, 140); ctx.lineTo(44, 140); ctx.stroke();
+  return c;
+}
+
+/** 해일 (현무) */
+export function paintTidalWave(): HTMLCanvasElement {
+  const [c, ctx] = makeCanvas(300, 260);
+  const g = ctx.createLinearGradient(0, 40, 0, 260);
+  g.addColorStop(0, 'rgba(230,252,255,0.95)'); g.addColorStop(0.35, 'rgba(110,200,230,0.9)'); g.addColorStop(1, 'rgba(30,90,140,0.85)');
+  ctx.beginPath();
+  ctx.moveTo(0, 260); ctx.lineTo(0, 150);
+  ctx.bezierCurveTo(40, 60, 150, 10, 230, 40);
+  ctx.bezierCurveTo(290, 60, 300, 120, 250, 120);
+  ctx.bezierCurveTo(210, 120, 220, 80, 250, 84);
+  ctx.bezierCurveTo(230, 60, 170, 70, 160, 120);
+  ctx.bezierCurveTo(150, 180, 220, 230, 300, 260);
+  ctx.closePath();
+  ctx.fillStyle = g; ctx.fill();
+  ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 4;
+  ctx.beginPath(); ctx.moveTo(10, 150); ctx.bezierCurveTo(50, 70, 150, 22, 228, 46); ctx.stroke();
+  const r = rng(3);
+  for (let i = 0; i < 26; i++) circle(ctx, 60 + r() * 230, 20 + r() * 110, 2 + r() * 5, 'rgba(255,255,255,0.85)');
+  cloudSwirl(ctx, 120, 170, 1.4, 'rgba(255,255,255,0)', 'rgba(255,255,255,0.7)', false, 2);
+  return c;
+}
+
+/** 빛기둥 (기린) */
+export function paintLightPillar(): HTMLCanvasElement {
+  const [c, ctx] = makeCanvas(120, 512);
+  const g = ctx.createLinearGradient(0, 0, 120, 0);
+  g.addColorStop(0, 'rgba(255,240,170,0)'); g.addColorStop(0.3, 'rgba(255,240,170,0.6)'); g.addColorStop(0.5, 'rgba(255,255,255,0.95)'); g.addColorStop(0.7, 'rgba(255,240,170,0.6)'); g.addColorStop(1, 'rgba(255,240,170,0)');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, 120, 512);
+  const v = ctx.createLinearGradient(0, 0, 0, 512);
+  v.addColorStop(0, 'rgba(0,0,0,1)'); v.addColorStop(0.15, 'rgba(0,0,0,0)');
+  ctx.globalCompositeOperation = 'destination-out';
+  ctx.fillStyle = v; ctx.fillRect(0, 0, 120, 512);
+  return c;
+}
+
+/** 불기둥 (해태) */
+export function paintFireColumn(): HTMLCanvasElement {
+  const [c, ctx] = makeCanvas(110, 300);
+  glow(ctx, 55, 250, 70, '#ff8a3c', 0.7);
+  const r = rng(11);
+  for (let k = 0; k < 9; k++) {
+    const x = 30 + r() * 50, top = 10 + r() * 80;
+    tuft(ctx, [[x, 300], [x + (r() - 0.5) * 30, 180], [x + (r() - 0.5) * 20, top]], 26 - k, k % 3 === 0 ? 'rgba(255,240,170,0.9)' : k % 2 ? 'rgba(255,140,50,0.85)' : 'rgba(220,60,30,0.85)');
+  }
+  return c;
+}
+
+/** 먹구름 (청룡 필살기) */
+export function paintStormCloud(): HTMLCanvasElement {
+  const [c, ctx] = makeCanvas(420, 160);
+  const r = rng(5);
+  for (let i = 0; i < 16; i++) ellipse(ctx, 40 + r() * 340, 60 + r() * 60, 50 + r() * 50, 30 + r() * 25, 0, rgba(r() < 0.5 ? '#2a3050' : '#3a4266', 0.85));
+  ctx.strokeStyle = 'rgba(160,220,255,0.5)';
+  ctx.lineWidth = 2;
+  for (let i = 0; i < 5; i++) { ctx.beginPath(); ctx.arc(80 + i * 60, 90, 14, Math.PI * 0.2, Math.PI * 1.7); ctx.stroke(); }
+  return c;
+}
+
+/** 필살기 버튼용 연꽃 아이콘 */
+export function paintLotusButton(): HTMLCanvasElement {
+  const [c, ctx] = makeCanvas(112, 112);
+  const g = ctx.createRadialGradient(46, 40, 6, 56, 56, 52);
+  g.addColorStop(0, 'rgba(90,60,96,0.95)'); g.addColorStop(1, 'rgba(30,18,36,0.95)');
+  circle(ctx, 56, 56, 50, g, '#e2b14c', 3.5);
+  ctx.save();
+  ctx.translate(56, 60);
+  for (let k = -2; k <= 2; k++) {
+    ctx.save();
+    ctx.rotate(k * 0.42);
+    ctx.beginPath(); ctx.moveTo(0, 6); ctx.quadraticCurveTo(-11, -14, 0, -30); ctx.quadraticCurveTo(11, -14, 0, 6); ctx.closePath();
+    const pg = ctx.createLinearGradient(0, -30, 0, 6);
+    pg.addColorStop(0, '#fff3d0'); pg.addColorStop(1, '#f2a7c0');
+    ctx.fillStyle = pg; ctx.fill();
+    ctx.strokeStyle = '#a0506a'; ctx.lineWidth = 1.2; ctx.stroke();
+    ctx.restore();
+  }
+  ctx.fillStyle = '#e2b14c'; ctx.beginPath(); ctx.ellipse(0, 8, 20, 5, 0, 0, TAU); ctx.fill();
+  ctx.restore();
+  return c;
+}
+
+/** 소용돌이 스킬 버튼 (참고 화면의 파랑·빨강 소용돌이) */
+export function paintSwirlButton(col: string, col2: string): HTMLCanvasElement {
+  const [c, ctx] = makeCanvas(112, 112);
+  const g = ctx.createRadialGradient(46, 40, 6, 56, 56, 52);
+  g.addColorStop(0, 'rgba(60,56,90,0.95)'); g.addColorStop(1, 'rgba(18,16,30,0.95)');
+  circle(ctx, 56, 56, 50, g, '#e2b14c', 3.5);
+  glow(ctx, 56, 56, 40, col, 0.5);
+  for (let k = 0; k < 3; k++) spiral(ctx, 56, 56, 30 - k * 5, 1.6, k === 1 ? '#ffffff' : k ? col2 : col, 5 - k, k * 2.1);
+  return c;
+}
+
+/** 빗줄기 */
+export function paintRainStreak(): HTMLCanvasElement {
+  const [c, ctx] = makeCanvas(6, 48);
+  const g = ctx.createLinearGradient(0, 0, 0, 48);
+  g.addColorStop(0, 'rgba(190,230,255,0)'); g.addColorStop(1, 'rgba(210,240,255,0.8)');
+  ctx.fillStyle = g;
+  ctx.fillRect(2, 0, 2, 48);
+  return c;
+}

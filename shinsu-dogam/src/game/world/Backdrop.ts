@@ -34,7 +34,7 @@ export class Backdrop {
     add(k('mount1'), 190, 460, 0.16, 0.1, -96);
     this.cliffs = add(k('cliffs'), 150, 620, 0.32, 0.2, -95);
     for (let i = 0; i < 4; i++) {
-      const f = scene.add.tileSprite(0, 0, 70, 520, 'waterfall').setOrigin(0.5, 0).setScrollFactor(0).setDepth(-94.5).setAlpha(0.9);
+      const f = scene.add.tileSprite(0, 0, 96, 520, 'waterfall').setOrigin(0.5, 0).setScrollFactor(0).setDepth(-94.5).setAlpha(0.9);
       this.falls.push(f);
     }
     add(k('grove'), 330, 440, 0.6, 0.4, -93);

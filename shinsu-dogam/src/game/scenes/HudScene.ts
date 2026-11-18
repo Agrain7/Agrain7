@@ -1,17 +1,21 @@
-// 플레이 화면 UI: 좌상단 프로필·레벨·체력·경험치, 우상단 지역명·일시정지, 하단 터치 버튼
+// 플레이 화면 UI — 참고 화면 구성: 좌상단 원형 초상 + Lv + 빨강 체력·파랑 경험치, 우상단 지역 현판 + 일시정지,
+// 좌하단 ←→, 우하단 파랑 소용돌이(공격)·빨강 소용돌이(기술)·연꽃(필살기)·위 화살표(점프). PC에서도 버튼을 누를 수 있다.
 import Phaser from 'phaser';
 import type { WorldScene } from './WorldScene.ts';
 import { txt, bar } from '../../ui/widgets.ts';
 import { store } from '../ctx.ts';
 import { controls, type Btn } from '../controls.ts';
 import { MOUNTS } from '../../data/mounts.ts';
+import { RANGED } from '../../data/beastSkills.ts';
+import type { MountId } from '../../data/types.ts';
 import { expToNext } from '../../systems/state.ts';
 import { GAME_W, GAME_H, COLORS, isTouchDevice } from '../config.ts';
-import { addCanvas } from '../textures.ts';
-import { makeCanvas } from '../../art/paint.ts';
+import { addCanvas, ensurePortrait } from '../textures.ts';
+import { MOUNT_ART, artKey } from '../../data/mountArt.ts';
+import { makeCanvas, cloudSwirl } from '../../art/paint.ts';
 import { audio } from '../../systems/audio.ts';
 
-interface TouchBtn { img: Phaser.GameObjects.Image; btn: Btn; cd?: Phaser.GameObjects.Graphics; r: number }
+interface UIBtn { img: Phaser.GameObjects.Image; btn: Btn; cd?: Phaser.GameObjects.Graphics; r: number; s: number; label?: Phaser.GameObjects.Text }
 
 export class HudScene extends Phaser.Scene {
   private world!: WorldScene;
@@ -24,14 +28,19 @@ export class HudScene extends Phaser.Scene {
   private stoneText!: Phaser.GameObjects.Text;
   private pearlText!: Phaser.GameObjects.Text;
   private face!: Phaser.GameObjects.Image;
-  private touchBtns: TouchBtn[] = [];
-  private touchLayer!: Phaser.GameObjects.Container;
-  private hints!: Phaser.GameObjects.Container;
+  private btns: UIBtn[] = [];
+  private btnLayer!: Phaser.GameObjects.Container;
+  private legend!: Phaser.GameObjects.Text;
   private bossLayer!: Phaser.GameObjects.Container;
   private bossBar!: ReturnType<typeof bar>;
   private msgs: Phaser.GameObjects.Text[] = [];
-  private cdIcons!: Phaser.GameObjects.Graphics;
-  private touchOn = false;
+  private ultRing!: Phaser.GameObjects.Graphics;
+  private ultGlow!: Phaser.GameObjects.Image;
+  private ultReadyShown = false;
+  private progress!: Phaser.GameObjects.Graphics;
+  private progressIcon!: Phaser.GameObjects.Image;
+  private rangedText!: Phaser.GameObjects.Text;
+  private showBtns = true;
   private lastOutfit = '';
 
   constructor() {
@@ -40,126 +49,171 @@ export class HudScene extends Phaser.Scene {
 
   create() {
     this.world = this.scene.get('World') as WorldScene;
-    this.touchBtns = [];
+    this.btns = [];
     this.msgs = [];
-    // ---- 좌상단 프로필 ----
-    const g = this.add.graphics();
-    g.fillStyle(0x1d1a2b, 0.55);
-    g.fillRoundedRect(14, 12, 400, 104, 18);
-    g.lineStyle(2, 0xe2b14c, 0.8);
-    g.strokeRoundedRect(14, 12, 400, 104, 18);
-    this.add.circle(66, 64, 44, 0xf2e6cc).setStrokeStyle(4, 0xe2b14c);
-    this.face = this.add.image(66, 64, this.faceTexture()).setDisplaySize(84, 84);
-    this.lv = txt(this, 122, 20, 'Lv. 1', 24, COLORS.textLight, { title: true, stroke: '#1d1a2b', strokeThickness: 4 });
-    this.nameText = txt(this, 210, 25, '', 17, '#e8dcc4', { stroke: '#1d1a2b', strokeThickness: 3 });
-    this.hp = bar(this, 122, 54, 270, 18, COLORS.hp);
-    this.hpText = txt(this, 257, 63, '', 14, '#ffffff', { stroke: '#1d1a2b', strokeThickness: 3 }).setOrigin(0.5);
-    this.exp = bar(this, 122, 80, 270, 12, COLORS.exp);
-    // 재화
-    this.add.image(436, 34, 'icon_gold').setScale(0.42);
-    this.goldText = txt(this, 456, 22, '0', 20, COLORS.textLight, { stroke: '#1d1a2b', strokeThickness: 4 });
-    this.add.image(436, 72, 'icon_stone').setScale(0.42);
-    this.stoneText = txt(this, 456, 60, '0', 20, COLORS.textLight, { stroke: '#1d1a2b', strokeThickness: 4 });
-    this.pearlText = txt(this, 530, 60, '', 18, '#bfe9ff', { stroke: '#1d1a2b', strokeThickness: 4 });
-    // ---- 우상단 지역명 + 일시정지 ----
+    this.ultReadyShown = false;
+    this.ensureOrnaments();
+    // ---- 좌상단: 초상 + 레벨 + 체력·경험치 ----
+    this.add.image(250, 66, 'hud_plate').setOrigin(0.5);
+    this.add.circle(72, 70, 50, 0xf2e6cc);
+    this.face = this.add.image(72, 70, this.faceTexture()).setDisplaySize(94, 94);
+    this.add.image(72, 70, 'hud_ring');
+    this.lv = txt(this, 136, 22, 'Lv. 1', 26, '#f6ead0', { title: true, stroke: '#1d1a2b', strokeThickness: 5 });
+    this.nameText = txt(this, 236, 28, '', 16, '#e8dcc4', { stroke: '#1d1a2b', strokeThickness: 3 });
+    this.hp = bar(this, 132, 58, 268, 20, COLORS.hp);
+    this.hpText = txt(this, 266, 68, '', 13, '#ffffff', { stroke: '#1d1a2b', strokeThickness: 3 }).setOrigin(0.5);
+    this.exp = bar(this, 132, 84, 236, 13, COLORS.exp);
+    this.add.image(146, 116, 'icon_gold').setScale(0.36);
+    this.goldText = txt(this, 162, 106, '0', 17, '#f6ead0', { stroke: '#1d1a2b', strokeThickness: 4 });
+    this.add.image(236, 116, 'icon_stone').setScale(0.36);
+    this.stoneText = txt(this, 252, 106, '0', 17, '#f6ead0', { stroke: '#1d1a2b', strokeThickness: 4 });
+    this.pearlText = txt(this, 310, 106, '', 16, '#bfe9ff', { stroke: '#1d1a2b', strokeThickness: 4 });
+    // ---- 우상단: 지역 현판 + 일시정지 ----
     const map = this.world.map;
-    const tg = this.add.graphics();
-    tg.fillStyle(0x1d1a2b, 0.6);
-    tg.fillRoundedRect(GAME_W - 330, 18, 236, 52, 26);
-    tg.lineStyle(2, 0xe2b14c, 0.9);
-    tg.strokeRoundedRect(GAME_W - 330, 18, 236, 52, 26);
-    txt(this, GAME_W - 212, 44, `${map.name} ${map.id}`, 22, COLORS.textLight, { title: true }).setOrigin(0.5);
-    const pause = this.add.image(GAME_W - 52, 44, 'btn_pause').setScale(0.5).setInteractive({ useHandCursor: true });
+    this.add.image(GAME_W - 232, 52, 'hud_banner');
+    txt(this, GAME_W - 232, 52, `${map.name} ${map.id}`, 25, '#f6ead0', { title: true, stroke: '#1d1a2b', strokeThickness: 4 }).setOrigin(0.5);
+    const pause = this.add.image(GAME_W - 62, 52, 'btn_pause').setScale(0.56).setInteractive({ useHandCursor: true });
     pause.on('pointerup', () => { audio.unlock(); this.world.openMenu('stable'); });
-    const sw = this.add.image(GAME_W - 52, 104, 'btn_swap').setScale(0.42).setInteractive({ useHandCursor: true });
-    sw.on('pointerdown', () => { controls.touch.swap = true; });
+    const sw = this.add.image(GAME_W - 62, 118, 'btn_swap').setScale(0.44).setInteractive({ useHandCursor: true });
+    sw.on('pointerdown', () => { controls.touch.swap = true; audio.unlock(); });
     sw.on('pointerup', () => { controls.touch.swap = false; });
     sw.on('pointerout', () => { controls.touch.swap = false; });
     sw.setVisible(store.state.ownedMounts().length > 1);
+    if (sw.visible) txt(this, GAME_W - 62, 146, 'Q 교체', 12, '#f6ead0', { stroke: '#1d1a2b', strokeThickness: 3 }).setOrigin(0.5);
+    // ---- 상단 가운데: 구간 진행 (편의) ----
+    this.progress = this.add.graphics();
+    this.progressIcon = this.add.image(0, 26, 'wisp_gold').setScale(1.2);
     // ---- 보스 체력 ----
     this.bossLayer = this.add.container(0, 0).setVisible(false);
-    const bt = txt(this, GAME_W / 2, 92, '흑운 산군', 22, '#ffd0c8', { title: true, stroke: '#1d1a2b', strokeThickness: 5 }).setOrigin(0.5);
-    this.bossBar = bar(this, GAME_W / 2 - 260, 112, 520, 18, 0x8a2be2);
+    const bt = txt(this, GAME_W / 2, 96, '흑운 산군', 22, '#ffd0c8', { title: true, stroke: '#1d1a2b', strokeThickness: 5 }).setOrigin(0.5);
+    this.bossBar = bar(this, GAME_W / 2 - 260, 116, 520, 18, 0x8a2be2);
     this.bossLayer.add([bt, this.bossBar.g]);
-    // ---- 터치 버튼 ----
-    this.touchLayer = this.add.container(0, 0);
-    const mk = (key: string, x: number, y: number, btn: Btn, s = 0.86, withCd = false) => {
-      const img = this.add.image(x, y, key).setScale(s).setAlpha(0.9).setInteractive();
-      const r = 56 * s;
-      const on = (p: Phaser.Input.Pointer) => { controls.touch[btn] = true; controls.usedTouch = true; audio.unlock(); img.setScale(s * 0.92); void p; };
+    // ---- 버튼 (참고 화면 배치) ----
+    this.btnLayer = this.add.container(0, 0);
+    const pc = !isTouchDevice();
+    const mk = (key: string, x: number, y: number, btn: Btn, s: number, cd = false, key2 = '') => {
+      const img = this.add.image(x, y, key).setScale(s).setAlpha(0.95).setInteractive({ useHandCursor: true });
+      const on = () => { controls.touch[btn] = true; controls.usedTouch = true; audio.unlock(); img.setScale(s * 0.92); };
       const off = () => { controls.touch[btn] = false; img.setScale(s); };
       img.on('pointerdown', on);
       img.on('pointerup', off);
       img.on('pointerout', off);
-      const cd = withCd ? this.add.graphics() : undefined;
-      this.touchLayer.add(img);
-      if (cd) this.touchLayer.add(cd);
-      this.touchBtns.push({ img, btn, cd, r });
-    };
-    mk('btn_left', 92, GAME_H - 92, 'left');
-    mk('btn_right', 222, GAME_H - 92, 'right');
-    mk('btn_down', 157, GAME_H - 205, 'down', 0.62);
-    mk('btn_attack', GAME_W - 300, GAME_H - 82, 'attack', 0.86, true);
-    mk('btn_skill', GAME_W - 215, GAME_H - 190, 'special', 0.8, true);
-    mk('btn_dash', GAME_W - 100, GAME_H - 245, 'dash', 0.68, true);
-    mk('btn_jump', GAME_W - 112, GAME_H - 96, 'jump', 1.0);
-    // ---- PC 키 안내 + 쿨타임 ----
-    this.hints = this.add.container(0, 0);
-    const hg = this.add.graphics();
-    hg.fillStyle(0x1d1a2b, 0.5);
-    hg.fillRoundedRect(GAME_W - 560, GAME_H - 46, 548, 34, 17);
-    this.hints.add(hg);
-    this.hints.add(txt(this, GAME_W - 286, GAME_H - 29, 'A·D 이동  Space 점프  J 공격  K 기술  L 돌진  Q 교체  Esc 메뉴', 15, '#f6ead0').setOrigin(0.5));
-    this.cdIcons = this.add.graphics();
-    this.hints.add(this.cdIcons);
-    this.hints.add(txt(this, GAME_W - 40, GAME_H - 80, 'K', 16, '#ffffff', { fontStyle: 'bold' }).setOrigin(0.5));
-    this.hints.add(txt(this, GAME_W - 86, GAME_H - 80, 'L', 16, '#ffffff', { fontStyle: 'bold' }).setOrigin(0.5));
-    this.applyTouchMode();
-    this.input.on('pointerdown', (p: Phaser.Input.Pointer) => {
-      if (p.wasTouch && !this.touchOn && store.state.data.settings.touch === 'auto') {
-        controls.usedTouch = true;
-        this.applyTouchMode();
+      const g = cd ? this.add.graphics() : undefined;
+      this.btnLayer.add(img);
+      if (g) this.btnLayer.add(g);
+      let label: Phaser.GameObjects.Text | undefined;
+      if (pc && key2) {
+        label = txt(this, x, y + 56 * s + 10, key2, 13, '#f6ead0', { stroke: '#1d1a2b', strokeThickness: 3 }).setOrigin(0.5);
+        this.btnLayer.add(label);
       }
-    });
+      const b: UIBtn = { img, btn, cd: g, r: 50 * s, s, label };
+      this.btns.push(b);
+      return b;
+    };
+    // 좌하단 이동 (구름 장식)
+    this.btnLayer.add(this.add.image(165, GAME_H - 96, 'hud_cloud').setAlpha(0.9));
+    mk('btn_left', 98, GAME_H - 96, 'left', 0.9, false, 'A / ←');
+    mk('btn_right', 232, GAME_H - 96, 'right', 0.9, false, 'D / →');
+    mk('btn_down', 165, GAME_H - 214, 'down', 0.6);
+    // 우하단 기술
+    mk('btn_swirl_blue', GAME_W - 478, GAME_H - 92, 'attack', 0.82, true, 'J 공격');
+    mk('btn_swirl_red', GAME_W - 362, GAME_H - 92, 'special', 0.82, true, 'K 기술');
+    const lotus = mk('btn_lotus', GAME_W - 246, GAME_H - 92, 'ult', 0.82, false, 'U 필살기');
+    mk('btn_jump', GAME_W - 112, GAME_H - 108, 'jump', 1.04, false, 'Space 점프');
+    mk('btn_dash', GAME_W - 112, GAME_H - 250, 'dash', 0.66, true, 'L 돌진');
+    this.ultGlow = this.add.image(lotus.img.x, lotus.img.y, 'wisp_gold').setScale(7).setAlpha(0).setBlendMode(Phaser.BlendModes.ADD);
+    this.btnLayer.addAt(this.ultGlow, 0);
+    this.ultRing = this.add.graphics();
+    this.btnLayer.add(this.ultRing);
+    this.rangedText = txt(this, GAME_W - 478, GAME_H - 150, '', 12, '#bfe9ff', { stroke: '#1d1a2b', strokeThickness: 3 }).setOrigin(0.5);
+    this.btnLayer.add(this.rangedText);
+    this.legend = txt(this, GAME_W / 2, GAME_H - 16, 'A·D 이동 · Space 점프(길게: 활공·비행) · J 공격(누르고 있으면 연속, 멀면 원거리) · K 기술 · U 필살기 · L 돌진 · Q 교체 · Esc 메뉴', 13, '#f6ead0', { stroke: '#1d1a2b', strokeThickness: 3 }).setOrigin(0.5).setAlpha(0.85);
+    this.applyButtonMode();
     // ---- 월드 이벤트 ----
     const onMsg = (m: string, c: string) => this.message(m, c);
     const onTitle = (t: string, s: string) => this.titleCard(t, s);
-    const onBoss = (hp: number, max: number, show: boolean) => {
-      this.bossLayer.setVisible(show);
-      this.bossBar.set(hp / max);
-    };
+    const onBoss = (hp: number, max: number, show: boolean) => { this.bossLayer.setVisible(show); this.bossBar.set(hp / max); };
+    const onCut = (id: MountId, stage: number, name: string, hanja: string, ink: string, color: number) => this.cutIn(id, stage, name, hanja, ink, color);
     this.world.events.on('hud-msg', onMsg);
     this.world.events.on('hud-title', onTitle);
     this.world.events.on('boss-hp', onBoss);
+    this.world.events.on('ult-cutin', onCut);
     this.events.once('shutdown', () => {
       this.world.events.off('hud-msg', onMsg);
       this.world.events.off('hud-title', onTitle);
       this.world.events.off('boss-hp', onBoss);
+      this.world.events.off('ult-cutin', onCut);
     });
-    this.events.on('resume', () => { this.applyTouchMode(); this.refreshFace(); });
+    this.events.on('resume', () => { this.applyButtonMode(); this.refreshFace(); });
   }
 
-  private applyTouchMode() {
+  /** HUD 장식 텍스처 (한 번만 생성) */
+  private ensureOrnaments() {
+    if (this.textures.exists('hud_plate')) return;
+    // 초상 옆 먹색 판 + 금테 + 구름 문양
+    {
+      const [c, ctx] = makeCanvas(480, 150);
+      const g = ctx.createLinearGradient(0, 0, 480, 0);
+      g.addColorStop(0, 'rgba(20,16,32,0.82)'); g.addColorStop(0.75, 'rgba(20,16,32,0.6)'); g.addColorStop(1, 'rgba(20,16,32,0)');
+      ctx.fillStyle = g;
+      ctx.beginPath(); ctx.moveTo(60, 20); ctx.lineTo(440, 20); ctx.quadraticCurveTo(470, 66, 440, 112); ctx.lineTo(60, 112); ctx.closePath(); ctx.fill();
+      ctx.strokeStyle = 'rgba(226,177,76,0.85)'; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(110, 22); ctx.lineTo(420, 22); ctx.moveTo(110, 110); ctx.lineTo(400, 110); ctx.stroke();
+      cloudSwirl(ctx, 438, 98, 0.9, 'rgba(226,177,76,0)', 'rgba(226,177,76,0.9)', false, 1.5);
+      addCanvas(this, 'hud_plate', c);
+    }
+    // 초상 금테 (이중 고리 + 구름 꼬리)
+    {
+      const [c, ctx] = makeCanvas(140, 140);
+      ctx.strokeStyle = '#e2b14c'; ctx.lineWidth = 6; ctx.beginPath(); ctx.arc(70, 70, 52, 0, Math.PI * 2); ctx.stroke();
+      ctx.strokeStyle = '#7a5a1e'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(70, 70, 56, 0, Math.PI * 2); ctx.stroke();
+      ctx.strokeStyle = '#fff1c4'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(70, 70, 47, 0, Math.PI * 2); ctx.stroke();
+      cloudSwirl(ctx, 22, 112, 0.9, '#e2b14c', '#7a5a1e', true, 1.3);
+      cloudSwirl(ctx, 112, 24, 0.7, '#e2b14c', '#7a5a1e', false, 1.3);
+      addCanvas(this, 'hud_ring', c);
+    }
+    // 지역 현판
+    {
+      const [c, ctx] = makeCanvas(300, 70);
+      const g = ctx.createLinearGradient(0, 0, 0, 70);
+      g.addColorStop(0, 'rgba(40,32,58,0.92)'); g.addColorStop(1, 'rgba(18,14,28,0.92)');
+      ctx.fillStyle = g;
+      ctx.beginPath(); ctx.moveTo(28, 6); ctx.lineTo(272, 6); ctx.quadraticCurveTo(296, 35, 272, 64); ctx.lineTo(28, 64); ctx.quadraticCurveTo(4, 35, 28, 6); ctx.closePath(); ctx.fill();
+      ctx.strokeStyle = '#e2b14c'; ctx.lineWidth = 2.5; ctx.stroke();
+      ctx.strokeStyle = 'rgba(226,177,76,0.5)'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(34, 12); ctx.lineTo(266, 12); ctx.moveTo(34, 58); ctx.lineTo(266, 58); ctx.stroke();
+      for (const x of [16, 284]) { ctx.fillStyle = '#e2b14c'; ctx.beginPath(); ctx.moveTo(x, 26); ctx.lineTo(x + (x < 150 ? 8 : -8), 35); ctx.lineTo(x, 44); ctx.lineTo(x + (x < 150 ? -6 : 6), 35); ctx.closePath(); ctx.fill(); }
+      addCanvas(this, 'hud_banner', c);
+    }
+    // 이동 버튼 사이 금빛 구름
+    {
+      const [c, ctx] = makeCanvas(150, 60);
+      cloudSwirl(ctx, 75, 34, 1.4, 'rgba(226,177,76,0.18)', 'rgba(226,177,76,0.85)', false, 1.6);
+      addCanvas(this, 'hud_cloud', c);
+    }
+  }
+
+  private applyButtonMode() {
     const mode = store.state.data.settings.touch;
-    this.touchOn = mode === 'on' || (mode === 'auto' && (isTouchDevice() || controls.usedTouch));
-    this.touchLayer.setVisible(this.touchOn);
-    this.hints.setVisible(!this.touchOn);
+    this.showBtns = mode !== 'off';
+    this.btnLayer.setVisible(this.showBtns);
+    this.legend.setVisible(!this.showBtns && !isTouchDevice());
   }
 
-  /** 라이더 얼굴 초상 (라이더 시트에서 머리 부분을 원형으로 잘라냄) */
+  /** 라이더 얼굴 초상 */
   private faceTexture() {
     const outfit = store.state.data.cosmetics.outfit;
     this.lastOutfit = outfit;
     const key = `face_${outfit}`;
     if (this.textures.exists(key)) return key;
-    const rk = `rider_${outfit}`;
-    const src = this.textures.get(rk);
+    const src = this.textures.get(`rider_${outfit}`);
     const fr = src.get('idle_0');
     const [c, ctx] = makeCanvas(84, 84);
     ctx.beginPath();
     ctx.arc(42, 42, 42, 0, Math.PI * 2);
     ctx.clip();
-    ctx.fillStyle = '#f2e6cc';
+    const bg = ctx.createRadialGradient(42, 30, 6, 42, 42, 44);
+    bg.addColorStop(0, '#fff3dc'); bg.addColorStop(1, '#e8c9a0');
+    ctx.fillStyle = bg;
     ctx.fillRect(0, 0, 84, 84);
     const img = src.getSourceImage() as HTMLCanvasElement;
     ctx.drawImage(img, fr.cutX + 56 - 32, fr.cutY + 46 - 30, 64, 64, 0, 4, 84, 84);
@@ -168,13 +222,13 @@ export class HudScene extends Phaser.Scene {
   }
   private refreshFace() {
     if (store.state.data.cosmetics.outfit !== this.lastOutfit && this.textures.exists(`rider_${store.state.data.cosmetics.outfit}`)) {
-      this.face.setTexture(this.faceTexture()).setDisplaySize(84, 84);
+      this.face.setTexture(this.faceTexture()).setDisplaySize(94, 94);
     }
   }
 
   message(m: string, color: string) {
-    const y = 150 + this.msgs.length * 38;
-    const t = txt(this, GAME_W / 2, y, m, 22, color, { stroke: '#1d1a2b', strokeThickness: 5, align: 'center' }).setOrigin(0.5).setAlpha(0);
+    const y = 170 + this.msgs.length * 36;
+    const t = txt(this, GAME_W / 2, y, m, 21, color, { stroke: '#1d1a2b', strokeThickness: 5, align: 'center' }).setOrigin(0.5).setAlpha(0);
     this.msgs.push(t);
     this.tweens.add({ targets: t, alpha: 1, duration: 200 });
     this.tweens.add({
@@ -195,6 +249,34 @@ export class HudScene extends Phaser.Scene {
     this.tweens.add({ targets: c, alpha: 0, delay: 2200, duration: 600, onComplete: () => c.destroy() });
   }
 
+  /** 필살기 컷인: 먹 띠 + 영물 원화 + 기술 이름 */
+  private cutIn(id: MountId, stage: number, name: string, hanja: string, ink: string, color: number) {
+    const c = this.add.container(0, 0).setDepth(500);
+    const dim = this.add.rectangle(0, 0, GAME_W, GAME_H, 0x000000, 0.35).setOrigin(0);
+    const band = this.add.graphics();
+    band.fillStyle(Phaser.Display.Color.HexStringToColor(ink).color, 0.92);
+    band.beginPath();
+    band.moveTo(-40, GAME_H / 2 - 120); band.lineTo(GAME_W + 40, GAME_H / 2 - 160); band.lineTo(GAME_W + 40, GAME_H / 2 + 90); band.lineTo(-40, GAME_H / 2 + 130);
+    band.closePath(); band.fillPath();
+    band.lineStyle(4, 0xe2b14c, 1);
+    band.lineBetween(-40, GAME_H / 2 - 120, GAME_W + 40, GAME_H / 2 - 160);
+    band.lineBetween(-40, GAME_H / 2 + 130, GAME_W + 40, GAME_H / 2 + 90);
+    const glow = this.add.image(380, GAME_H / 2, 'wisp_gold').setScale(24).setTint(color).setAlpha(0.6).setBlendMode(Phaser.BlendModes.ADD);
+    const key = ensurePortrait(this, id, stage, 'normal', store.state.data.mounts[id]?.skin);
+    const info = MOUNT_ART[artKey(id, stage)];
+    const por = this.add.image(-260, GAME_H / 2 + 120, key).setOrigin(0.5, 1).setScale(Math.min(2.4, 380 / info.w, 300 / info.h));
+    const title = txt(this, GAME_W + 300, GAME_H / 2 - 30, name, 64, '#fff6e0', { title: true, stroke: '#1d1a2b', strokeThickness: 10 }).setOrigin(0.5);
+    const sub = txt(this, GAME_W + 300, GAME_H / 2 + 40, hanja, 30, '#e2b14c', { title: true, stroke: '#1d1a2b', strokeThickness: 6 }).setOrigin(0.5);
+    c.add([dim, band, glow, por, title, sub]);
+    band.setScale(1, 0.05).setY(GAME_H / 2 * 0.95);
+    this.tweens.add({ targets: band, scaleY: 1, y: 0, duration: 140, ease: 'Cubic.out' });
+    this.tweens.add({ targets: por, x: 360, duration: 260, ease: 'Back.out' });
+    this.tweens.add({ targets: [title, sub], x: 880, duration: 260, delay: 60, ease: 'Back.out' });
+    this.cameras.main.flash(160, 255, 255, 255);
+    audio.play('boss');
+    this.tweens.add({ targets: c, alpha: 0, delay: 760, duration: 180, onComplete: () => c.destroy() });
+  }
+
   update() {
     const p = this.world.player;
     if (!p) return;
@@ -202,6 +284,7 @@ export class HudScene extends Phaser.Scene {
     const m = st.active;
     this.lv.setText(`Lv. ${m.level}`);
     this.nameText.setText(`${MOUNTS[m.id].name} · ${MOUNTS[m.id].stages[m.stage].name}`);
+    this.nameText.x = 136 + this.lv.width + 12;
     this.hp.set(p.hp / p.maxHp);
     this.hpText.setText(`${Math.max(0, Math.ceil(p.hp))} / ${p.maxHp}`);
     this.exp.set(m.exp / expToNext(m.level));
@@ -209,43 +292,50 @@ export class HudScene extends Phaser.Scene {
     this.stoneText.setText(`${st.count('spirit_stone')}`);
     const shards = st.count('pearl_shard');
     this.pearlText.setText(!st.owns('cheongryong') && shards > 0 ? `여의주 ${shards}/3` : '');
-    // 쿨타임 표시
+    // 구간 진행
+    const map = this.world.map;
+    const px0 = GAME_W / 2 - 170, pw = 340;
+    const prog = Phaser.Math.Clamp((p.x - map.spawn.x) / Math.max(1, map.goal.x - map.spawn.x), 0, 1);
+    const g = this.progress;
+    g.clear();
+    g.fillStyle(0x1d1a2b, 0.55); g.fillRoundedRect(px0 - 6, 20, pw + 12, 12, 6);
+    g.fillStyle(0xe2b14c, 0.9); g.fillRoundedRect(px0, 23, pw * prog, 6, 3);
+    g.fillStyle(0xc3352c, 1); g.fillRect(px0 + pw - 3, 16, 6, 20);
+    this.progressIcon.x = px0 + pw * prog;
+    // 쿨타임
     const cds: Partial<Record<Btn, [number, number]>> = {
-      attack: [Math.max(0, p.attackCD), p.attackSkill.cooldown],
+      attack: [Math.max(0, p.attackCD), Math.max(0.2, p.attackCD > 0.45 ? p.attackSkill.cooldown : RANGED[p.def.id as MountId].cd)],
       special: [Math.max(0, p.specialCD), p.specialSkill.cooldown],
       dash: [Math.max(0, p.dashCD), p.mv.dash.cooldown],
     };
-    if (this.touchOn) {
-      for (const tb of this.touchBtns) {
-        if (tb.btn === 'down') tb.img.setVisible(p.flying);
-        if (!tb.cd) continue;
-        const v = cds[tb.btn];
-        tb.cd.clear();
-        if (v && v[0] > 0) {
-          tb.cd.fillStyle(0x000000, 0.5);
-          tb.cd.slice(tb.img.x, tb.img.y, tb.r * 0.9, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * (v[0] / v[1]), false);
-          tb.cd.fillPath();
+    if (this.showBtns) {
+      for (const b of this.btns) {
+        if (b.btn === 'down') b.img.setVisible(p.flying);
+        if (!b.cd) continue;
+        const v = cds[b.btn];
+        b.cd.clear();
+        if (v && v[0] > 0.05) {
+          b.cd.fillStyle(0x000000, 0.5);
+          b.cd.slice(b.img.x, b.img.y, b.r * 0.9, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * Math.min(1, v[0] / v[1]), false);
+          b.cd.fillPath();
         }
       }
-    } else {
-      const g = this.cdIcons;
-      g.clear();
-      const names: [Btn, string][] = [['special', 'K'], ['dash', 'L']];
-      names.forEach(([b], i) => {
-        const v = cds[b]!;
-        const x = GAME_W - 600 - i * 0, y = GAME_H - 90 - i * 44;
-        g.fillStyle(0x1d1a2b, 0.6);
-        g.fillCircle(GAME_W - 40 - i * 46, GAME_H - 80, 18);
-        if (v[0] > 0) {
-          g.fillStyle(0xc3352c, 0.8);
-          g.slice(GAME_W - 40 - i * 46, GAME_H - 80, 18, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * (v[0] / v[1]), false);
-          g.fillPath();
-        } else {
-          g.lineStyle(3, 0xe2b14c, 1);
-          g.strokeCircle(GAME_W - 40 - i * 46, GAME_H - 80, 18);
-        }
-        void x; void y;
-      });
+      // 필살기 게이지 고리
+      const lotus = this.btns.find((b) => b.btn === 'ult')!;
+      const r = this.ultRing;
+      r.clear();
+      r.lineStyle(7, 0x2a2238, 0.9);
+      r.strokeCircle(lotus.img.x, lotus.img.y, lotus.r + 6);
+      r.lineStyle(7, p.ult >= 100 ? 0xffe08a : 0xf2a7c0, 1);
+      r.beginPath();
+      r.arc(lotus.img.x, lotus.img.y, lotus.r + 6, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * (p.ult / 100), false);
+      r.strokePath();
+      this.ultGlow.setAlpha(p.ult >= 100 ? 0.5 + Math.sin(this.time.now / 160) * 0.25 : 0);
+      this.rangedText.setText(RANGED[p.def.id as MountId].name);
     }
+    if (p.ult >= 100 && !this.ultReadyShown) {
+      this.ultReadyShown = true;
+      this.message('필살기 준비 완료! (U / 연꽃 버튼)', '#ffe08a');
+    } else if (p.ult < 100) this.ultReadyShown = false;
   }
 }

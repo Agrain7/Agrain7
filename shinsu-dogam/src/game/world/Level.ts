@@ -30,7 +30,12 @@ export class Level {
     const st = store.state;
     const rec = st.data.stages[map.id];
 
-    // 장식 (지형 뒤)
+    // 장식 (지형 뒤) — 시작 지점에는 참고 화면처럼 큰 벚나무 + 깃발·등롱
+    const g0 = map.ground.find((g) => map.spawn.x >= g.x0 && map.spawn.x <= g.x1);
+    if (g0) {
+      this.addDecor({ type: 'tree', x: Math.max(g0.x0 + 60, map.spawn.x - 70), y: g0.top, s: 1.35 });
+      this.addDecor({ type: 'lantern', x: map.spawn.x + 150, y: g0.top });
+    }
     for (const d of map.decor) this.addDecor(d);
 
     // 지면
@@ -150,7 +155,15 @@ export class Level {
     switch (d.type) {
       case 'pavilion': s.add.image(d.x, d.y + 6, 'pavilion').setOrigin(0.5, 1).setScale(sc).setDepth(-12); break;
       case 'lantern': s.add.image(d.x, d.y + 4, 'lantern_on').setOrigin(0.5, 1).setScale(0.9 * sc).setDepth(-12); break;
-      case 'tree': s.add.image(d.x, d.y + 8, Math.round(d.x / 100) % 2 ? 'tree_cherry' : 'tree_plum').setOrigin(0.5, 1).setScale(sc).setDepth(-13); break;
+      case 'tree': {
+        s.add.image(d.x, d.y + 8, Math.round(d.x / 100) % 2 ? 'tree_cherry' : 'tree_plum').setOrigin(0.5, 1).setScale(sc).setDepth(-13);
+        // 가지에 매단 깃발과 등롱 (바람에 흔들림)
+        const ban = s.add.image(d.x - 78 * sc, d.y - 236 * sc, 'banner').setOrigin(0.5, 0).setScale(0.62 * sc).setDepth(-12.5);
+        s.tweens.add({ targets: ban, angle: { from: -4, to: 4 }, yoyo: true, repeat: -1, duration: 1700 + (d.x % 7) * 90, ease: 'Sine.inOut' });
+        const lan = s.add.image(d.x + 64 * sc, d.y - 214 * sc, 'hang_lantern').setOrigin(0.5, 0).setScale(0.62 * sc).setDepth(-12.5);
+        s.tweens.add({ targets: lan, angle: { from: 5, to: -5 }, yoyo: true, repeat: -1, duration: 1500 + (d.x % 5) * 110, ease: 'Sine.inOut' });
+        break;
+      }
       case 'pine': s.add.image(d.x, d.y + 8, 'pine').setOrigin(0.5, 1).setScale(sc).setDepth(-13); break;
       case 'rock': s.add.image(d.x, d.y + 10, 'rock').setOrigin(0.5, 1).setScale(sc).setDepth(-12); break;
       case 'grass': s.add.image(d.x, d.y + 6, 'grass').setOrigin(0.5, 1).setScale(sc).setDepth(-2); break;

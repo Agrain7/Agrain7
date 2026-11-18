@@ -17,7 +17,8 @@ import { audio } from '../../systems/audio.ts';
 import { analytics } from '../../services/analytics/Analytics.ts';
 import { overlayQueue } from '../overlayQueue.ts';
 import { GAME_W, GAME_H, DEBUG } from '../config.ts';
-import { ensureMount } from '../textures.ts';
+import { prewarmMount } from '../textures.ts';
+import { ULT_GAIN } from '../../data/beastSkills.ts';
 import type { GameEvent } from '../../systems/state.ts';
 
 export class WorldScene extends Phaser.Scene {
@@ -28,6 +29,7 @@ export class WorldScene extends Phaser.Scene {
   monsters: Monster[] = [];
   boss?: Boss;
   private bd!: Backdrop;
+  private fg!: Phaser.GameObjects.TileSprite;
   private solidRects: Rect[] = [];
   private platRects: Rect[] = [];
   private respawn = { x: 0, y: 0 };
@@ -41,6 +43,8 @@ export class WorldScene extends Phaser.Scene {
   private camOffX = -200;
   private unsub: (() => void) | null = null;
   private fainting = false;
+  /** 필살기 연출 중 시간 정지 (적·적 투사체 멈춤) */
+  freezeT = 0;
 
   constructor() {
     super('World');
@@ -72,6 +76,8 @@ export class WorldScene extends Phaser.Scene {
     this.level = new Level(this, map);
     this.respawn = { x: map.spawn.x, y: map.spawn.y };
     this.player = new Player(this, map.spawn.x, map.spawn.y);
+    // 전경 수풀 (참고 화면 아래쪽의 어두운 잎사귀, 카메라보다 빠르게 흐름)
+    this.fg = this.add.tileSprite(0, GAME_H - 104, GAME_W, 150, 'fg_leaves').setOrigin(0).setScrollFactor(0).setDepth(30).setAlpha(0.92);
     this.physics.world.enable(this.player.zone);
     this.physics.add.collider(this.player.zone, this.level.solids);
     this.physics.add.collider(this.player.zone, this.level.oneways);
@@ -103,8 +109,8 @@ export class WorldScene extends Phaser.Scene {
     // 보유 영물 애니메이션을 미리 만들어 둔다 (교체 시 끊김 방지, 구간 시작 연출 동안 한 마리씩)
     store.state.ownedMounts()
       .filter((m) => m.id !== store.state.data.activeMount)
-      .slice(0, 4)
-      .forEach((m, i) => this.time.delayedCall(700 + i * 300, () => ensureMount(this, m.id, m.stage, m.skin)));
+      .slice(0, 5)
+      .forEach((m, i) => this.time.delayedCall(600 + i * 200, () => prewarmMount(this, m.id, m.stage, m.skin)));
     if (DEBUG) this.setupDebug();
   }
 
@@ -193,6 +199,7 @@ export class WorldScene extends Phaser.Scene {
 
   onMonsterDefeated(m: Monster) {
     const st = store.state;
+    if (this.player.ultT <= 0) this.player.ult = Math.min(100, this.player.ult + ULT_GAIN.kill);
     this.defeatsThisRun++;
     const [g0, g1] = m.def.gold;
     const gold = Phaser.Math.Between(g0, g1);
@@ -298,6 +305,7 @@ export class WorldScene extends Phaser.Scene {
     p.dashT = 0;
     if (full) p.hp = p.maxHp;
     p.invuln = 1.5;
+    p.blinkT = 1.5;
     p.locked = false;
     this.fainting = false;
     this.cameras.main.fadeIn(400, 10, 8, 16);
@@ -316,6 +324,8 @@ export class WorldScene extends Phaser.Scene {
     this.combat.dust(this.player.x, this.player.bottom, 10);
     audio.play('skill');
     this.hudMsg(`${MOUNTS[n.id].name}(으)로 교체!`);
+    const nn = owned[(i + 2) % owned.length];
+    prewarmMount(this, nn.id, nn.stage, nn.skin);
   }
 
   openMenu(tab = 'stable') {
@@ -328,7 +338,8 @@ export class WorldScene extends Phaser.Scene {
   }
 
   update(_t: number, dms: number) {
-    const dt = Math.min(dms, 50) / 1000;
+    // 느린 기기에서도 타이머가 실제 시간과 비슷하게 흐르도록 (물리는 고정 간격으로 따로 계산)
+    const dt = Math.min(dms, 100) / 1000;
     controls.update();
     const p = this.player;
     const st = store.state;
@@ -337,13 +348,20 @@ export class WorldScene extends Phaser.Scene {
     if (controls.pressed.menu) return this.openMenu('stable');
     if (controls.pressed.swap && !p.locked) this.swapMount();
     p.update(dt);
-    for (const m of this.monsters) m.update(dt);
+    if (this.freezeT > 0) {
+      this.freezeT -= dt;
+      for (const m of this.monsters) if (!m.dead) { m.body.setVelocity(0, 0); m.body.setAllowGravity(false); }
+    } else {
+      for (const m of this.monsters) if (!m.dead && !m.def.flying && !m.body.allowGravity && m.def.ai !== 'caster') m.body.setAllowGravity(true);
+      for (const m of this.monsters) m.update(dt);
+    }
     this.monsters = this.monsters.filter((m) => !(m.dead && !m.spr.active));
-    this.combat.update(dt);
+    if (this.freezeT <= 0) this.combat.update(dt);
     // 카메라: 진행 방향 쪽을 넓게
     this.camOffX = Phaser.Math.Linear(this.camOffX, -p.facing * 190, Math.min(1, dt * 1.6));
     this.cameras.main.setFollowOffset(this.camOffX, p.flying ? 0 : -40);
     this.bd.update(this.cameras.main.scrollX, this.cameras.main.scrollY, dt);
+    this.fg.tilePositionX = this.cameras.main.scrollX * 1.3;
     // 이동 거리
     const dx = Math.abs(p.x - p.lastX);
     if (dx < 60) st.addDistance(dx);
@@ -510,4 +528,4 @@ export class WorldScene extends Phaser.Scene {
   }
 }
 
-void QUESTS; void GAME_W;
+void QUESTS;

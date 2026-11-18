@@ -200,6 +200,7 @@ export class GameState {
     const now = Date.now();
     this.data.mounts[id] = { id, level: 1, exp: 0, stage: 0, obtainedAt: now, history: [{ stage: 0, at: now, level: 1 }] };
     if (!this.data.codexSeen.includes(id)) this.data.codexSeen.push(id);
+    this.equipPendingSkins();
     this.emit({ type: 'mountObtained', mount: id });
     this.emit({ type: 'changed' });
     return true;
@@ -426,6 +427,49 @@ export class GameState {
     for (const m of this.ownedMounts()) if (m.skin && ids.includes(m.skin)) m.skin = undefined;
     this.emit({ type: 'changed' });
   }
+  /** 장착 중인가 */
+  isEquipped(id: string): boolean {
+    const def = COSMETICS[id];
+    if (!def) return false;
+    const c = this.data.cosmetics;
+    if (def.kind === 'outfit') return c.outfit === id;
+    if (def.kind === 'decor') return c.decor.includes(id);
+    if (def.kind === 'trail') return c.trail === id;
+    if (def.kind === 'skin' && def.mount) return this.data.mounts[def.mount]?.skin === id;
+    return false;
+  }
+
+  /** 영물을 얻기 전에 산 스킨: 영물이 합류하면 자동 장착 (가장 최근 구매) */
+  equipPendingSkins() {
+    for (const id of [...this.data.cosmetics.owned].reverse()) {
+      const def = COSMETICS[id];
+      if (def?.kind !== 'skin' || !def.mount) continue;
+      const m = this.data.mounts[def.mount];
+      if (m && !m.skin) m.skin = id;
+    }
+  }
+
+  /** 구매한 꾸미기를 바로 장착. 스킨은 해당 영물을 가지고 있어야 함 */
+  autoEquip(ids: string[]): { equipped: string[]; needMount: MountId[] } {
+    const equipped: string[] = [];
+    const needMount: MountId[] = [];
+    const c = this.data.cosmetics;
+    for (const id of ids) {
+      const def = COSMETICS[id];
+      if (!def || !this.ownsCosmetic(id)) continue;
+      if (def.kind === 'skin' && def.mount) {
+        const m = this.data.mounts[def.mount];
+        if (!m) { needMount.push(def.mount); continue; }
+        m.skin = id;
+      } else if (def.kind === 'outfit') c.outfit = id;
+      else if (def.kind === 'decor') c.decor = [id];
+      else if (def.kind === 'trail') c.trail = id;
+      equipped.push(id);
+    }
+    this.emit({ type: 'changed' });
+    return { equipped, needMount };
+  }
+
   equip(id: string): boolean {
     const def = COSMETICS[id];
     if (!def || !this.ownsCosmetic(id)) return false;

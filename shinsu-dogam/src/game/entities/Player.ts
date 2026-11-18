@@ -11,6 +11,8 @@ import { store } from '../ctx.ts';
 import { GRAVITY, MAX_FALL } from '../config.ts';
 import { audio } from '../../systems/audio.ts';
 import { overlaps } from '../world/Level.ts';
+import { ULT_GAIN } from '../../data/beastSkills.ts';
+import { PLAYTEST_GIFT_ID } from '../../systems/playtestGift.ts';
 
 const approach = (v: number, t: number, d: number) => (v < t ? Math.min(t, v + d) : Math.max(t, v - d));
 
@@ -60,6 +62,14 @@ export class Player {
   diving: SkillDef | null = null;
   inUpdraft = false;
   locked = false;
+  /** 필살기 게이지 0..100 */
+  ult = PLAYTEST_GIFT_ID ? 100 : 40;
+  /** 필살기 연출 중 (조작 잠금 + 무적) */
+  ultT = 0;
+  /** 공격 모션 재생 시간 */
+  atkAnimT = 0;
+  /** 피격 깜빡임 (필살기·돌진 무적은 깜빡이지 않음) */
+  blinkT = 0;
   squash = 1;
   lastX = 0;
   private afterT = 0;
@@ -151,7 +161,8 @@ export class Player {
     const mv = this.mv;
     // 타이머
     this.dashCD -= dt; this.attackCD -= dt; this.specialCD -= dt; this.attackT -= dt; this.castT -= dt;
-    this.invuln -= dt; this.hurtT -= dt; this.shieldT -= dt; this.flashT -= dt;
+    this.invuln -= dt; this.hurtT -= dt; this.shieldT -= dt; this.flashT -= dt; this.atkAnimT -= dt; this.blinkT -= dt;
+    if (this.ultT > 0) { this.ultT -= dt; this.invuln = Math.max(this.invuln, 0.2); }
     this.grounded = b.blocked.down || b.touching.down;
     if (this.grounded) {
       this.coyote = 0.1;
@@ -168,6 +179,14 @@ export class Player {
     // 상승 기류
     this.inUpdraft = this.scene.level.updrafts.some((u) => overlaps(this.rect(), u));
 
+    if (this.scene.freezeT > 0) {
+      // 필살기 컷인 동안 멈춤
+      b.setVelocity(0, 0);
+      b.setAllowGravity(false);
+      this.wasGrounded = this.grounded;
+      this.updateVisual(dt);
+      return;
+    }
     if (this.locked) {
       b.setVelocityX(approach(b.velocity.x, 0, 3000 * dt));
       this.wasGrounded = this.grounded;
@@ -276,9 +295,13 @@ export class Player {
       }
     }
 
-    // 공격
-    if (c.pressed.attack && this.attackCD <= 0) this.scene.combat.basic(this);
+    // 공격: 누르고 있으면 자동 연속 공격, 가까우면 근접 / 멀면 원거리 (자동 조준)
+    if (c.held.attack && this.attackCD <= 0) this.scene.combat.smartAttack(this);
     if (c.pressed.special && this.specialCD <= 0) this.scene.combat.special(this);
+    if (c.pressed.ult) {
+      if (this.ult >= 100) this.scene.combat.ultimate(this);
+      else this.scene.hudMsg(`필살기 게이지 ${Math.floor(this.ult)}% — 적을 공격하면 차오른다`, '#ffd0a0');
+    }
     if (c.pressed.down && this.grounded && !this.flying) {
       // 아래 + 점프로 구름 발판 아래로 내려가기는 추후
     }
@@ -313,6 +336,7 @@ export class Player {
     d = Math.max(1, Math.round(d - this.defense * 0.5));
     this.hp -= d;
     this.invuln = 1.0;
+    this.blinkT = 1.0;
     this.hurtT = 0.3;
     this.flashT = 0.12;
     const dir = Math.sign(this.x - fromX) || -this.facing;
@@ -323,6 +347,7 @@ export class Player {
     this.dashT = 0;
     this.diving = null;
     audio.play('hurt');
+    this.ult = Math.min(100, this.ult + ULT_GAIN.hurt);
     this.scene.cameras.main.shake(120, 0.006);
     this.scene.combat.floatText(this.x, this.body.top - 10, `-${d}`, '#ff6b5e');
     return true;
@@ -334,37 +359,30 @@ export class Player {
     const vx = b.velocity.x, vy = b.velocity.y;
     // 애니메이션 선택
     const key = this.mt.key;
-    let manim: 'idle' | 'run' | 'fly' | null = 'idle';
-    let rframe: string | null = null;
-    const bird = info.motion === 'bird';
-    const serp = info.motion === 'serpent';
+    let manim: 'idle' | 'run' | 'fly' | 'atk' = 'idle';
     let ranim = 'idle';
-    if (this.flying || (this.gliding && (bird || serp))) { manim = 'fly'; ranim = 'fly'; }
-    else if (!this.grounded) {
-      if (bird || serp) { manim = 'fly'; }
-      else { manim = null; rframe = vy < 0 ? 'run_1' : 'run_4'; }
-      ranim = 'fly';
-    } else if (Math.abs(vx) > 40 || this.dashT > 0) { manim = 'run'; ranim = 'run'; }
+    if (this.atkAnimT > 0) { manim = 'atk'; ranim = 'attack'; }
+    else if (this.flying || !this.grounded) { manim = 'fly'; ranim = 'fly'; }
+    else if (Math.abs(vx) > 40 || this.dashT > 0) { manim = 'run'; ranim = 'run'; }
     if (this.attackT > 0) ranim = 'attack';
-    if (this.castT > 0) ranim = 'cast';
+    if (this.castT > 0 || this.ultT > 0) ranim = 'cast';
     if (this.hurtT > 0) ranim = 'hit';
-    if (manim) {
-      this.mountSpr.anims.play(`${key}:${manim}`, true);
-      const sp = manim === 'run' ? Phaser.Math.Clamp(Math.abs(vx) / this.mv.runSpeed, 0.5, 1.6) : this.gliding && !this.flying ? 0.45 : 1;
-      this.mountSpr.anims.timeScale = this.dashT > 0 ? 2 : sp;
-    } else {
-      this.mountSpr.anims.stop();
-      this.mountSpr.setFrame(rframe!);
-    }
+    const akey = `${key}:${manim}`;
+    if (this.mountSpr.anims.currentAnim?.key !== akey || (manim === 'atk' && !this.mountSpr.anims.isPlaying && this.atkAnimT > 0.2)) this.mountSpr.anims.play(akey, manim !== 'atk');
+    let sp = 1;
+    if (manim === 'run') sp = Phaser.Math.Clamp(Math.abs(vx) / this.mv.runSpeed, 0.5, 1.6);
+    else if (manim === 'fly') sp = this.gliding && !this.flying ? 0.5 : this.flying ? (vy < -80 ? 1.5 : 1) : info.motion === 'bird' || info.motion === 'serpent' ? 1.1 : 0.6;
+    this.mountSpr.anims.timeScale = this.dashT > 0 ? 2 : sp;
     this.riderSpr.anims.play(`${this.riderKey}:${ranim}`, true);
     // 위치·방향
     const flip = this.facing < 0;
     this.mountSpr.setFlipX(flip);
     this.riderSpr.setFlipX(flip);
     const sc = info.scale;
-    const seatX = (info.seat[0] - 0.5) * info.w * sc * this.facing;
-    const seatY = -(1 - info.seat[1]) * info.h * sc;
-    this.riderSpr.setPosition(seatX, seatY + (manim === 'run' ? Math.sin(this.scene.time.now / 60) * 1.5 : 0));
+    const so = this.mt.seat[this.mountSpr.frame.name] ?? [0, 0];
+    const seatX = (info.seat[0] - 0.5 + so[0]) * info.w * sc * this.facing;
+    const seatY = -(1 - info.seat[1] - so[1]) * info.h * sc;
+    this.riderSpr.setPosition(seatX, seatY);
     if (this.decorSpr) {
       this.decorSpr.setPosition(seatX + 0.2 * info.w * sc * this.facing, seatY + 0.18 * info.h * sc);
       this.decorSpr.setRotation(Math.sin(this.scene.time.now / 160) * 0.25);
@@ -379,10 +397,9 @@ export class Player {
     const stretch = this.dashT > 0 ? 1.12 : 1;
     this.vis.setScale(stretch * (2 - this.squash) * (this.facing < 0 ? 1 : 1), this.squash);
     // 공격 돌출
-    const lunge = this.attackT > 0 ? Math.sin((1 - this.attackT / 0.25) * Math.PI) * 10 * this.facing : 0;
-    this.vis.setPosition(b.center.x + lunge, b.bottom + 3);
+    this.vis.setPosition(b.center.x, b.bottom + 3);
     // 피격 깜빡임
-    this.vis.setAlpha(this.invuln > 0 && this.dashT <= 0 ? (Math.floor(this.invuln * 18) % 2 ? 0.35 : 1) : 1);
+    this.vis.setAlpha(this.blinkT > 0 && this.dashT <= 0 ? (Math.floor(this.blinkT * 18) % 2 ? 0.35 : 1) : 1);
     if (this.flashT > 0) { this.mountSpr.setTint(0xff7a6a); this.riderSpr.setTint(0xff7a6a); }
     else { this.mountSpr.clearTint(); this.riderSpr.clearTint(); }
     // 보호막

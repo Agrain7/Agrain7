@@ -1,0 +1,12 @@
+import { createRequire } from 'node:module';
+const require = createRequire(import.meta.url);
+const { chromium } = require('playwright');
+const [qs, out, width = '1800'] = process.argv.slice(2);
+const browser = await chromium.launch();
+const page = await browser.newPage({ viewport: { width: Number(width), height: 800 } });
+page.on('pageerror', (e) => console.log('[pageerror]', e.message));
+await page.goto(`http://localhost:5173/tools/rig-preview.html?${qs}`);
+await page.waitForFunction(() => document.title === 'ready', null, { timeout: 120000 });
+console.log('times', JSON.stringify(await page.evaluate(() => window.__times)));
+await page.screenshot({ path: out, fullPage: true });
+await browser.close();

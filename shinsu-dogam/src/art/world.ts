@@ -6,8 +6,8 @@ import {
 export type SkyKind = 'dusk' | 'night' | 'mist';
 
 const SKY: Record<SkyKind, { stops: [number, string][]; stars: number; mount: [string, string, string]; mist: string; moon: string }> = {
-  dusk: { stops: [[0, '#262a57'], [0.35, '#5a4f8a'], [0.7, '#d99b8f'], [1, '#f6d6ab']], stars: 60, mount: ['#8c86b3', '#6a6898', '#4b4f7c'], mist: '#f3d9c4', moon: '#f8d68e' },
-  night: { stops: [[0, '#0f1433'], [0.4, '#273063'], [0.75, '#5d5c94'], [1, '#a996bd']], stars: 160, mount: ['#5c6191', '#424878', '#2f3561'], mist: '#b6a8cc', moon: '#f6dfa3' },
+  dusk: { stops: [[0, '#262a57'], [0.35, '#5a4f8a'], [0.7, '#d99b8f'], [1, '#f6d6ab']], stars: 60, mount: ['#8c86b3', '#6a6898', '#4b4f7c'], mist: '#f3d9c4', moon: '#f6bf8a' },
+  night: { stops: [[0, '#0f1433'], [0.4, '#273063'], [0.75, '#5d5c94'], [1, '#a996bd']], stars: 160, mount: ['#5c6191', '#424878', '#2f3561'], mist: '#b6a8cc', moon: '#f4c690' },
   mist: { stops: [[0, '#6f8fbf'], [0.45, '#a9c0dc'], [0.8, '#e6dccd'], [1, '#f4e8d6']], stars: 0, mount: ['#9fb0cc', '#8296b8', '#687ea3'], mist: '#f2ece2', moon: '#fff1c9' },
 };
 
@@ -532,9 +532,48 @@ export function paintShrine(): HTMLCanvasElement {
 }
 
 // ---------- 지형 텍스처 ----------
-export function paintGroundBody(style: 'grass' | 'stone' | 'cave', size = 256): HTMLCanvasElement {
+/** 참고 화면의 돌다리·석축 (가지런한 돌 블록 + 이끼) */
+function paintMasonry(size: number): HTMLCanvasElement {
   const [c, ctx] = makeCanvas(size, size);
-  const r = rng(style === 'grass' ? 9 : style === 'stone' ? 19 : 29);
+  const r = rng(21);
+  ctx.fillStyle = '#4a4440';
+  ctx.fillRect(0, 0, size, size);
+  const rowH = 32;
+  for (let row = 0; row < size / rowH; row++) {
+    const off = row % 2 ? 0 : 32;
+    for (let x = -64 + off; x < size + 64; x += 64) {
+      const w = 64, y = row * rowH;
+      const base = ['#8f877b', '#857c71', '#9a9184', '#7d756c'][Math.floor(r() * 4)];
+      for (const dx of [0, -size, size]) {
+        const X = x + dx;
+        if (X > size || X + w < 0) continue;
+        const g = ctx.createLinearGradient(0, y, 0, y + rowH);
+        g.addColorStop(0, shadeHex(base, 0.12));
+        g.addColorStop(1, shadeHex(base, -0.18));
+        ctx.fillStyle = g;
+        ctx.beginPath();
+        ctx.moveTo(X + 3, y + 3); ctx.lineTo(X + w - 3, y + 3); ctx.lineTo(X + w - 3, y + rowH - 3); ctx.lineTo(X + 3, y + rowH - 3); ctx.closePath();
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(40,34,30,0.7)';
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+        ctx.strokeStyle = 'rgba(255,255,255,0.18)';
+        ctx.beginPath(); ctx.moveTo(X + 5, y + 5); ctx.lineTo(X + w - 6, y + 5); ctx.stroke();
+      }
+    }
+  }
+  for (let i = 0; i < 40; i++) {
+    const x = r() * size, y = r() * size;
+    for (const dx of [0, -size, size]) ellipse(ctx, x + dx, y, 6 + r() * 12, 3 + r() * 5, 0, rgba(r() < 0.5 ? '#5f7f4e' : '#6f8f5a', 0.35));
+  }
+  for (let i = 0; i < 120; i++) circle(ctx, r() * size, r() * size, 0.8 + r() * 1.6, rgba(r() < 0.5 ? '#ffffff' : '#000000', 0.07));
+  return c;
+}
+
+export function paintGroundBody(style: 'grass' | 'stone' | 'cave', size = 256): HTMLCanvasElement {
+  if (style === 'grass') return paintMasonry(size);
+  const [c, ctx] = makeCanvas(size, size);
+  const r = rng(style === 'stone' ? 19 : 29);
   const base = style === 'cave' ? '#3d3a4c' : style === 'stone' ? '#6d6a78' : '#6e5a4c';
   ctx.fillStyle = base;
   ctx.fillRect(0, 0, size, size);
@@ -559,6 +598,27 @@ export function paintGroundBody(style: 'grass' | 'stone' | 'cave', size = 256): 
 }
 
 export function paintGroundTop(style: 'grass' | 'stone' | 'cave', w = 256, h = 48): HTMLCanvasElement {
+  if (style === 'grass') {
+    // 판석 길 + 가장자리 풀
+    const [c, ctx] = makeCanvas(w, h);
+    const r = rng(33);
+    ctx.fillStyle = '#6d665d';
+    ctx.fillRect(0, 18, w, 18);
+    for (let x = 0; x < w; x += 42) {
+      const g = ctx.createLinearGradient(0, 16, 0, 34);
+      g.addColorStop(0, '#b3ab9c'); g.addColorStop(1, '#7c7468');
+      ctx.fillStyle = g;
+      ctx.fillRect(x + 1, 17, 40, 16);
+      ctx.strokeStyle = 'rgba(40,34,30,0.6)'; ctx.lineWidth = 1.2; ctx.strokeRect(x + 1, 17, 40, 16);
+    }
+    for (let i = 0; i < 60; i++) {
+      const x = r() * w, hh = 6 + r() * 14;
+      for (const dx of [0, -w, w]) tuft(ctx, [[x + dx, 19], [x + dx + (r() - 0.5) * 4, 19 - hh * 0.6], [x + dx + (r() - 0.5) * 8, 19 - hh]], 3, r() < 0.5 ? '#6f9a4e' : '#93bf62');
+    }
+    for (let i = 0; i < 7; i++) circle(ctx, r() * w, 8 + r() * 10, 2.2, r() < 0.5 ? '#f6e27a' : '#f5b3c6');
+    for (let i = 0; i < 10; i++) ellipse(ctx, r() * w, 36 + r() * 4, 8 + r() * 10, 3 + r() * 3, 0, rgba('#5f8a4a', 0.75));
+    return c;
+  }
   const [c, ctx] = makeCanvas(w, h);
   const r = rng(style.length * 7);
   const g1 = style === 'cave' ? '#4f5a63' : style === 'stone' ? '#7e8a6b' : '#5d8e48';
@@ -586,7 +646,6 @@ export function paintGroundTop(style: 'grass' | 'stone' | 'cave', w = 256, h = 4
     const x = r() * w, hh = 6 + r() * 12;
     for (const dx of [0, -w, w]) tuft(ctx, [[x + dx, 20], [x + dx + (r() - 0.5) * 4, 20 - hh * 0.6], [x + dx + (r() - 0.5) * 8, 20 - hh]], 3, r() < 0.5 ? g1 : g2);
   }
-  if (style === 'grass') for (let i = 0; i < 8; i++) circle(ctx, r() * w, 10 + r() * 10, 2.2, r() < 0.5 ? '#f6e27a' : '#f5b3c6');
   // 아래 늘어진 풀/이끼
   for (let i = 0; i < 16; i++) {
     const x = r() * w;
@@ -652,5 +711,60 @@ export function paintPlatform(style: 'wood' | 'cloud' | 'stone' | 'bridge', w = 
     }
   }
   void lerp; void clamp;
+  return c;
+}
+
+/** 매달린 붉은 깃발 (참고 화면 왼쪽 나무의 깃발) */
+export function paintBanner(): HTMLCanvasElement {
+  const [c, ctx] = makeCanvas(70, 200);
+  ctx.strokeStyle = '#5b3a24'; ctx.lineWidth = 4; ctx.beginPath(); ctx.moveTo(4, 8); ctx.lineTo(66, 8); ctx.stroke();
+  ctx.strokeStyle = '#3a2416'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(35, 0); ctx.lineTo(35, 8); ctx.stroke();
+  const g = ctx.createLinearGradient(0, 10, 0, 170);
+  g.addColorStop(0, '#c8352e'); g.addColorStop(1, '#8e2620');
+  ctx.fillStyle = g;
+  ctx.beginPath(); ctx.moveTo(10, 10); ctx.lineTo(60, 10); ctx.lineTo(60, 160); ctx.lineTo(35, 176); ctx.lineTo(10, 160); ctx.closePath(); ctx.fill();
+  ctx.strokeStyle = '#e2b14c'; ctx.lineWidth = 3; ctx.stroke();
+  ctx.strokeStyle = 'rgba(226,177,76,0.8)'; ctx.lineWidth = 1.5;
+  ctx.strokeRect(16, 18, 38, 132);
+  cloudSwirl(ctx, 35, 70, 0.7, 'rgba(226,177,76,0.25)', '#e2b14c', false, 1.2);
+  goldDiscLite(ctx, 35, 118, 9);
+  for (const x of [18, 52]) { ctx.strokeStyle = '#e2b14c'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(x, 160); ctx.lineTo(x, 190); ctx.stroke(); circle(ctx, x, 192, 3, '#c8352e'); }
+  return c;
+}
+
+function goldDiscLite(ctx: Ctx, x: number, y: number, r: number) {
+  circle(ctx, x, y, r, '#e2b14c', '#7a5a1e', 1.5);
+  circle(ctx, x, y, r * 0.45, '#c8352e');
+}
+
+/** 매달린 등롱 (빛남) */
+export function paintHangLantern(): HTMLCanvasElement {
+  const [c, ctx] = makeCanvas(90, 150);
+  glow(ctx, 45, 92, 46, '#ffb35a', 0.65);
+  ctx.strokeStyle = '#3a2416'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(45, 0); ctx.lineTo(45, 56); ctx.stroke();
+  ctx.fillStyle = '#3a2416'; ctx.fillRect(33, 54, 24, 6); ctx.fillRect(33, 124, 24, 6);
+  const g = ctx.createRadialGradient(40, 84, 4, 45, 92, 34);
+  g.addColorStop(0, '#fff2c0'); g.addColorStop(0.5, '#ff9a3c'); g.addColorStop(1, '#c3352c');
+  ctx.fillStyle = g;
+  ctx.beginPath(); ctx.ellipse(45, 92, 22, 32, 0, 0, TAU); ctx.fill();
+  ctx.strokeStyle = 'rgba(90,20,10,0.6)'; ctx.lineWidth = 1;
+  for (let k = -2; k <= 2; k++) { ctx.beginPath(); ctx.ellipse(45, 92, Math.abs(k) * 7 + 1, 32, 0, 0, TAU); ctx.stroke(); }
+  ctx.strokeStyle = '#c3352c'; ctx.lineWidth = 2;
+  for (let k = -2; k <= 2; k++) { ctx.beginPath(); ctx.moveTo(45 + k * 3, 130); ctx.lineTo(45 + k * 4, 148); ctx.stroke(); }
+  return c;
+}
+
+/** 화면 아래 어두운 전경 수풀 (가로 타일) */
+export function paintForegroundLeaves(w = 1024, h = 150): HTMLCanvasElement {
+  const [c, ctx] = makeCanvas(w, h);
+  const r = rng(91);
+  for (let i = 0; i < 46; i++) {
+    const x = r() * w, y = h - r() * 60, rx = 30 + r() * 50, ry = 18 + r() * 30;
+    for (const dx of [0, -w, w]) ellipse(ctx, x + dx, y, rx, ry, r() - 0.5, rgba(r() < 0.5 ? '#1c2a2e' : '#24363a', 0.95));
+  }
+  for (let i = 0; i < 70; i++) {
+    const x = r() * w, y = h - 20 - r() * 70;
+    for (const dx of [0, -w, w]) tuft(ctx, [[x + dx, h], [x + dx + (r() - 0.5) * 20, y + 30], [x + dx + (r() - 0.5) * 40, y]], 8, rgba('#2a4042', 0.9));
+  }
   return c;
 }

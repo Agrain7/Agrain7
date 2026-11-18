@@ -12,6 +12,8 @@ import { ITEMS } from '../../src/data/items.ts';
 import { QUESTS } from '../../src/data/quests.ts';
 import { SERVER_PRICES } from '../../functions/api/_shared.ts';
 import { applyPlaytestGift } from '../../src/systems/playtestGift.ts';
+import { RANGED, ULTS } from '../../src/data/beastSkills.ts';
+import { MOUNT_RIGS } from '../../src/data/mountRigs.ts';
 
 class MemStorage implements StorageLike {
   m = new Map<string, string>();
@@ -235,20 +237,65 @@ test('하루 결제 한도: 5만 원 미만까지만 허용, 환불분·다른 �
   assert.equal(DAILY_PURCHASE_LIMIT, 50000);
 });
 
-test('플레이테스트 선물: 늑대 각성체 + 주작 각성체, 저장 데이터당 한 번, id 없으면 지급 안 함', () => {
+test('플레이테스트 선물: 영물 9종 각성체, 저장 데이터당 한 번, id 없으면 지급 안 함', () => {
   const g = new GameState(null);
   assert.equal(applyPlaytestGift(g, undefined), false);
   assert.equal(g.owns('jujak'), false);
   g.data.mounts.wolf!.level = 4;
   assert.ok(applyPlaytestGift(g, 'gift-1'));
-  assert.equal(g.data.mounts.wolf!.stage, 2);
-  assert.equal(g.data.mounts.wolf!.level, 30);
+  for (const id of MOUNT_ORDER) {
+    assert.equal(g.data.mounts[id]!.stage, 2, id);
+    assert.equal(g.data.mounts[id]!.level, 30, id);
+  }
   assert.deepEqual(g.data.mounts.wolf!.history.map((h) => h.stage), [0, 1, 2]);
-  assert.equal(g.data.mounts.jujak!.stage, 2);
   assert.ok(MOUNTS.jujak.stages[2].movement.flight, '주작 각성체는 자유 비행');
   assert.equal(g.data.activeMount, 'jujak');
   assert.equal(applyPlaytestGift(g, 'gift-1'), false, '같은 선물은 한 번만');
-  // 구버전 저장(gifts 필드 없음)도 처리
+  // 새 선물 id는 다시 지급되지만 타고 있는 영물은 바꾸지 않는다
+  g.setActive('hawk');
+  assert.ok(applyPlaytestGift(g, 'gift-2'));
+  assert.equal(g.data.activeMount, 'hawk');
   const old = migrate({ version: 1, mounts: { wolf: { id: 'wolf', level: 2, exp: 0, stage: 0, obtainedAt: 1 } } });
   assert.deepEqual(old.gifts, []);
+});
+
+test('구매한 꾸미기 자동 장착: 영물이 없으면 스킨은 대기, 의상·장식은 바로 장착', () => {
+  const g = new GameState(null);
+  g.grantCosmetics(['skin_cheongryong_gold', 'outfit_royal', 'decor_bell', 'trail_cloud', 'skin_wolf_snow']);
+  const r = g.autoEquip(['skin_cheongryong_gold', 'outfit_royal', 'decor_bell', 'trail_cloud', 'skin_wolf_snow']);
+  assert.deepEqual(r.needMount, ['cheongryong']);
+  assert.ok(r.equipped.includes('outfit_royal') && r.equipped.includes('skin_wolf_snow'));
+  assert.equal(g.data.cosmetics.outfit, 'outfit_royal');
+  assert.deepEqual(g.data.cosmetics.decor, ['decor_bell']);
+  assert.equal(g.data.cosmetics.trail, 'trail_cloud');
+  assert.equal(g.data.mounts.wolf!.skin, 'skin_wolf_snow');
+  assert.ok(g.isEquipped('skin_wolf_snow'));
+  assert.equal(g.isEquipped('skin_cheongryong_gold'), false);
+});
+
+test('영물별 원거리 공격·필살기 데이터가 9종 모두 있다', () => {
+  for (const id of MOUNT_ORDER) {
+    assert.ok(RANGED[id] && RANGED[id].count.length === 3, `${id} 원거리`);
+    assert.ok(ULTS[id]?.name, `${id} 필살기`);
+  }
+  assert.equal(new Set(MOUNT_ORDER.map((id) => ULTS[id].name)).size, 9, '필살기 이름이 모두 다름');
+});
+
+test('리그: 원화 27장 모두 부위 정의가 있고 좌표가 0..1 범위', () => {
+  for (const id of MOUNT_ORDER) for (const st of [0, 1, 2]) {
+    const bones = MOUNT_RIGS[`${id}_${st}`];
+    assert.ok(bones && bones.length >= 3, `${id}_${st}`);
+    for (const b of bones) {
+      for (const [x, y] of [...b.poly, ...(b.path ?? []), ...(b.pivot ? [b.pivot] : [])]) assert.ok(x >= 0 && x <= 1 && y >= 0 && y <= 1, `${id}_${st}.${b.id}`);
+      if (b.parent) assert.ok(bones.some((o) => o.id === b.parent), `${id}_${st}.${b.id} 부모`);
+    }
+  }
+});
+
+test('영물을 얻기 전에 산 스킨은 영물이 합류하면 자동 장착', () => {
+  const g = new GameState(null);
+  g.grantCosmetics(['skin_cheongryong_moon']);
+  assert.equal(g.autoEquip(['skin_cheongryong_moon']).needMount[0], 'cheongryong');
+  g.obtainMount('cheongryong');
+  assert.equal(g.data.mounts.cheongryong!.skin, 'skin_cheongryong_moon');
 });
