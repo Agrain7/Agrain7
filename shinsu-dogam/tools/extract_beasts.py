@@ -13,8 +13,12 @@
 import json
 import os
 import numpy as np
-from PIL import Image
+from PIL import Image, ImageDraw, ImageFilter
 from scipy import ndimage
+
+import sys
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import retouch  # noqa: E402
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SRC = os.path.join(ROOT, 'assets-src', 'reference', 'beasts_codex.png')
@@ -34,9 +38,11 @@ BEASTS = {
     ('hyeonmu', 0): {'box': (851, 400, 966, 496)},
     ('hyeonmu', 1): {'box': (994, 344, 1173, 502), 'erase': [(990, 420, 1000, 450)]},
     ('hyeonmu', 2): {'box': (1203, 327, 1516, 507)},
-    ('girin', 0): {'box': (108, 576, 242, 726)},
+    # 'fill': 얼굴·턱의 흰 털이 종이색과 같고 외곽선이 끊겨 있어 배경으로 잘못 지워지는 곳 → 다각형 안을 그림으로 채운다
+    ('girin', 0): {'box': (108, 576, 242, 726), 'fill': [[(117, 644), (122, 638), (132, 627), (142, 621), (152, 624), (160, 620), (168, 614), (178, 616), (186, 621), (192, 627), (189, 632), (196, 637), (192, 642), (197, 648), (191, 653), (193, 658), (184, 660), (175, 662), (160, 664), (148, 664), (140, 667), (132, 664), (124, 660), (118, 652)]]},
     ('girin', 1): {'box': (258, 534, 451, 730)},
-    ('girin', 2): {'box': (469, 532, 744, 731), 'erase': [(466, 640, 472, 670)]},
+    ('girin', 2): {'box': (469, 532, 744, 731), 'erase': [(466, 640, 472, 670)],
+                   'fill': [[(478, 582), (485, 572), (492, 565), (505, 560), (520, 555), (535, 553), (545, 560), (550, 575), (546, 590), (538, 598), (527, 600), (522, 620), (521, 640), (505, 645), (500, 625), (500, 605), (496, 599), (485, 601), (472, 600), (467, 597), (471, 589)]]},
     ('bonghwang', 0): {'box': (103, 820, 206, 940)},
     ('bonghwang', 1): {'box': (212, 776, 384, 966), 'erase': [(205, 865, 230, 902), (370, 864, 395, 902)]},
     ('bonghwang', 2): {'box': (392, 754, 662, 990), 'erase': [(624, 952, 680, 1000), (598, 754, 662, 778)]},
@@ -54,6 +60,15 @@ BEASTS = {
 T_BG = 30.0      # 이 거리 이내 = 확실한 배경
 T_SOFT = 70.0    # 배경~전경 사이 부드러운 경계
 SHADOW_MAX = 85.0  # 배경과 같은 계열(베이지)의 그림자 허용 거리
+
+
+# 벌린 입 다물기 리터치 (추출된 PNG 좌표, tools/retouch.py) — 사용자 요청: 늑대·백호는 입을 다문 모습
+MOUTHS = {
+    ('wolf', 2): {'cavity': [(146, 49), (152, 50), (160, 53), (166, 54), (167, 58), (164, 62), (157, 64), (151, 63), (148, 58), (146, 53)], 'jaw': [(147, 58), (150, 63), (156, 65), (163, 63), (166, 60), (169, 64), (166, 70), (160, 73), (152, 75), (145, 73), (142, 66), (144, 60)], 'hinge': (146, 54), 'angle': 22, 'heal': [(144, 48), (152, 49), (160, 52), (168, 53), (168, 58), (160, 61), (150, 61), (144, 57)], 'lines': [[(148, 54), (154, 55.5), (160, 56.5), (166, 56.5)]], 'width': 1.1},
+    ('baekho', 0): {'cavity': [(89, 56.5), (96, 56.5), (101, 58), (103, 61), (102, 66), (98, 69.5), (92, 69.5), (89, 66)], 'jaw': [(88.5, 67), (92, 70), (98, 70), (101, 66), (104, 66), (104.5, 72), (100, 77), (92, 78), (87.5, 74)], 'hinge': (89, 59), 'angle': 30, 'heal': [(88, 56), (101, 56), (110, 57.5), (110, 60), (102, 63.5), (92, 63.5), (88, 61)], 'lines': [[(90.5, 59), (95, 60.5), (100, 61), (105, 59.6)]], 'width': 1.0},
+    ('baekho', 1): {'cavity': [(154, 52), (160, 51), (166, 52), (171, 55), (173, 60), (174.5, 66), (169, 70.5), (160, 70.5), (156, 66), (154, 58)], 'jaw': [(153.5, 65), (158, 70), (166, 71), (172, 68), (175.5, 67), (175.5, 73), (170, 79), (162, 82), (155, 81), (151, 75)], 'hinge': (155, 56), 'angle': 27, 'heal': [(153, 51), (166, 51), (172, 55), (180, 55.5), (180, 58), (172, 62.5), (160, 64.5), (153, 62)], 'lines': [[(156, 57.5), (162, 60), (168, 61), (174, 59.5), (178, 57.5)]], 'width': 1.1},
+    ('baekho', 2): {'cavity': [(263, 58), (270, 56.5), (278, 57), (281.5, 60), (283.5, 66), (285.5, 72), (285.5, 79), (278, 80.5), (268, 79.5), (263, 72), (262, 64)], 'jaw': [(266, 74), (270, 80), (276, 81), (283, 80), (285.5, 73), (288.5, 77), (286.5, 84), (282, 90), (276, 93.5), (268, 93.5), (265, 86)], 'hinge': (264, 62), 'angle': 20, 'shift': (0, -5), 'heal': [(262, 56.5), (270, 55.5), (280, 56.5), (295, 57), (295, 60), (286, 64.5), (277, 69), (271, 75), (268, 84), (263, 88), (258, 83), (259, 70), (261, 64)], 'lines': [[(265, 61.5), (271, 64.5), (278, 66), (285, 65), (291, 61.5)], [(259, 84), (263, 87.5), (268, 85)]], 'width': 1.2},
+}
 
 
 def process(img: np.ndarray, cfg) -> np.ndarray:
@@ -110,6 +125,18 @@ def process(img: np.ndarray, cfg) -> np.ndarray:
         # 종이 영역 주변 그림자/결 1px까지 함께 제거
         pm = ndimage.binary_dilation(pm, iterations=1) & (dist < T_SOFT * 0.6)
         alpha[pm] = 0.0
+    ink = None
+    if cfg.get('fill'):
+        fm = Image.new('L', (w, h), 0)
+        dr = ImageDraw.Draw(fm)
+        for poly in cfg['fill']:
+            dr.polygon([(px - x0, py - y0) for (px, py) in poly], fill=255)
+        fa = np.asarray(fm.filter(ImageFilter.GaussianBlur(0.7)), np.float32) / 255.0
+        before = alpha > 0.5
+        alpha = np.maximum(alpha, np.clip(fa * 1.4 - 0.2, 0, 1))
+        # 새로 채운 가장자리에 원화와 같은 갈색 외곽선 1px
+        added = (fa > 0.5) & ~before
+        ink = ndimage.binary_dilation(added, iterations=1) & ~(fa > 0.5) & ~before
     fgm = alpha > 0.5
     # 부드러운 경계: 배경과 맞닿은 2px 띠에서 색 거리로 알파 계산
     near_bg = ndimage.binary_dilation(~fgm, iterations=2) & fgm
@@ -129,6 +156,9 @@ def process(img: np.ndarray, cfg) -> np.ndarray:
     a3 = alpha[..., None]
     col = np.where(a3 > 0.02, (crop - (1 - a3) * bg) / np.maximum(a3, 0.02), crop)
     col = np.clip(col, 0, 255)
+    if ink is not None:
+        col[ink] = (128, 78, 42)
+        alpha[ink] = 0.85
     rgba = np.dstack([col, alpha * 255]).astype(np.uint8)
     # 투명 여백 잘라내기 (+여백 2px)
     ys, xs = np.where(alpha > 0.05)
@@ -145,6 +175,8 @@ def main():
     tiles = []
     for (bid, stage), cfg in BEASTS.items():
         rgba = process(img, cfg)
+        if (bid, stage) in MOUTHS:
+            rgba = retouch.close_mouth(np.ascontiguousarray(rgba), MOUTHS[(bid, stage)])
         im = Image.fromarray(rgba, 'RGBA')
         name = f'{bid}_{stage}.png'
         im.save(os.path.join(OUT, name), optimize=True)

@@ -1,7 +1,8 @@
 import Phaser from 'phaser';
 import { MOUNT_ART } from '../../data/mountArt.ts';
 import { loadFonts } from '../fonts.ts';
-import { addCanvas, ensureRider, ensureSky, generateCommon, loadSpriteOverrides } from '../textures.ts';
+import { addCanvas, ensureRider, ensureSky, generateCommon, loadSpriteOverrides, prewarmMonsters } from '../textures.ts';
+import { MONSTER_ART, monsterImageKey } from '../../data/monsterArt.ts';
 import { store } from '../ctx.ts';
 import { GAME_W, GAME_H, AUTOTEST, DEBUG, START_STAGE } from '../config.ts';
 
@@ -20,6 +21,9 @@ export class BootScene extends Phaser.Scene {
     this.drawBar(0);
     this.load.on('progress', (p: number) => this.drawBar(p * 0.4));
     for (const key of Object.keys(MOUNT_ART)) this.load.image(`img_${key}`, `assets/mounts/${key}.png`);
+    for (const [id, art] of Object.entries(MONSTER_ART)) this.load.image(monsterImageKey(id), art.file);
+    for (const sky of ['dusk', 'night', 'mist']) this.load.image(`ref_${sky}_cliffs`, `assets/backgrounds/${sky}_cliffs.png`);
+    this.load.image('ref_portrait', 'assets/ui/portrait_haram.png');
   }
 
   private drawBar(p: number) {
@@ -49,12 +53,14 @@ export class BootScene extends Phaser.Scene {
           addCanvas(this, jobs[i][0], jobs[i][1]());
           i++;
         }
-        this.drawBar(0.4 + 0.5 * (i / jobs.length));
+        this.drawBar(0.4 + 0.4 * (i / jobs.length));
         if (i < jobs.length) this.time.delayedCall(1, step);
         else resolve();
       };
       step();
     });
+    this.label.setText('요괴의 기척을 살피는 중…');
+    await prewarmMonsters(this, (p) => this.drawBar(0.8 + 0.18 * p));
     ensureSky(this, 'dusk');
     ensureRider(this, store.state.data.cosmetics.outfit);
     this.drawBar(1);

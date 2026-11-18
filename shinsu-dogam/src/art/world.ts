@@ -1,12 +1,12 @@
 // 월하산맥 배경·지형 페인팅 (패럴랙스 레이어별로 분리된 2D 일러스트)
 import {
-  type Ctx, makeCanvas, rng, rgba, shadeHex, glow, circle, ellipse, TAU, clamp, splinePath, type V, paintShape, tuft, cloudSwirl, lerp,
+  type Ctx, makeCanvas, rng, rgba, shadeHex, glow, circle, ellipse, TAU, clamp, splinePath, type V, paintShape, clipTo, tuft, cloudSwirl, lerp,
 } from './paint.ts';
 
 export type SkyKind = 'dusk' | 'night' | 'mist';
 
 const SKY: Record<SkyKind, { stops: [number, string][]; stars: number; mount: [string, string, string]; mist: string; moon: string }> = {
-  dusk: { stops: [[0, '#262a57'], [0.35, '#5a4f8a'], [0.7, '#d99b8f'], [1, '#f6d6ab']], stars: 60, mount: ['#8c86b3', '#6a6898', '#4b4f7c'], mist: '#f3d9c4', moon: '#f6bf8a' },
+  dusk: { stops: [[0, '#2f3b74'], [0.3, '#5a6aa6'], [0.58, '#9a9bc9'], [0.8, '#d6b7b8'], [1, '#f2d6be']], stars: 40, mount: ['#9198c4', '#7178a9', '#525a86'], mist: '#f3d9c4', moon: '#f6bf8a' },
   night: { stops: [[0, '#0f1433'], [0.4, '#273063'], [0.75, '#5d5c94'], [1, '#a996bd']], stars: 160, mount: ['#5c6191', '#424878', '#2f3561'], mist: '#b6a8cc', moon: '#f4c690' },
   mist: { stops: [[0, '#6f8fbf'], [0.45, '#a9c0dc'], [0.8, '#e6dccd'], [1, '#f4e8d6']], stars: 0, mount: ['#9fb0cc', '#8296b8', '#687ea3'], mist: '#f2ece2', moon: '#fff1c9' },
 };
@@ -320,42 +320,92 @@ export function paintGrove(kind: SkyKind, w = 2048, h = 440): HTMLCanvasElement 
 }
 
 /** 벚꽃/매화 나무 */
+/** 꽃잎 다섯 장짜리 작은 꽃 도장 (나무 하나에 수백 개를 찍는다) */
+const flowerStampCache = new Map<string, HTMLCanvasElement[]>();
+function flowerStamps(kind: 'cherry' | 'plum', dark: number): HTMLCanvasElement[] {
+  const key = `${kind}_${dark.toFixed(2)}`;
+  const hit = flowerStampCache.get(key);
+  if (hit) return hit;
+  const pal: [string, string][] = kind === 'cherry'
+    ? [['#fff1f5', '#f0a9bf'], ['#fbd0dd', '#e07f9c'], ['#f5aec4', '#cf6688'], ['#ffffff', '#f1b4c6']]
+    : [['#ffd6df', '#d9607d'], ['#f28aa3', '#b8405f'], ['#e2607f', '#9c2c4b'], ['#fff0f3', '#e88aa1']];
+  const out = pal.map(([petal, edge]) => {
+    const [c, ctx] = makeCanvas(24, 24);
+    ctx.translate(12, 12);
+    const pc = shadeHex(petal, -dark), ec = shadeHex(edge, -dark);
+    for (let i = 0; i < 5; i++) {
+      ctx.save();
+      ctx.rotate((i * TAU) / 5);
+      ellipse(ctx, 0, -5.3, 3.7, 5.4, 0, pc, ec, 0.8);
+      ctx.restore();
+    }
+    circle(ctx, 0, 0, 1.9, shadeHex('#c4446a', -dark));
+    for (let i = 0; i < 5; i++) { const an = (i * TAU) / 5 + 0.6; circle(ctx, Math.cos(an) * 2.6, Math.sin(an) * 2.6, 0.65, shadeHex('#f7d26a', -dark)); }
+    return c;
+  });
+  flowerStampCache.set(key, out);
+  return out;
+}
+
 export function drawBlossomTree(ctx: Ctx, x: number, y: number, s: number, kind: 'cherry' | 'plum', dark = 0, seed = 1) {
   const r = rng(seed);
   const bark = shadeHex('#4a3428', -dark);
-  const blossom = kind === 'cherry' ? '#f4b8c8' : '#e9768f';
-  const blossomD = kind === 'cherry' ? '#e48fa8' : '#c24d6c';
+  const barkLine = shadeHex('#24170f', -dark);
+  const barkLight = shadeHex('#7a5a44', -dark);
+  const deep = kind === 'cherry' ? '#d97a9a' : '#a8344f';
+  const stamps = flowerStamps(kind, dark);
   ctx.save();
   ctx.translate(x, y);
   ctx.scale(s, s);
-  // 줄기와 가지 (붓질)
+  ctx.lineCap = 'round';
+  // 줄기와 가지: 먹선 → 껍질 → 한쪽 밝은 결 (붓질 느낌)
+  const segs: { x0: number; y0: number; cx: number; cy: number; x1: number; y1: number; w: number }[] = [];
+  const clusters: V[] = [];
   const branch = (x0: number, y0: number, a: number, len: number, w: number, depth: number) => {
     const x1 = x0 + Math.cos(a) * len, y1 = y0 + Math.sin(a) * len;
-    ctx.strokeStyle = bark;
-    ctx.lineWidth = w;
-    ctx.beginPath();
-    ctx.moveTo(x0, y0);
-    ctx.quadraticCurveTo((x0 + x1) / 2 + (r() - 0.5) * len * 0.4, (y0 + y1) / 2, x1, y1);
-    ctx.stroke();
+    segs.push({ x0, y0, cx: (x0 + x1) / 2 + (r() - 0.5) * len * 0.45, cy: (y0 + y1) / 2 + (r() - 0.5) * len * 0.15, x1, y1, w });
     if (depth > 0) {
-      branch(x1, y1, a - 0.35 - r() * 0.4, len * 0.72, w * 0.62, depth - 1);
-      branch(x1, y1, a + 0.3 + r() * 0.4, len * 0.68, w * 0.6, depth - 1);
+      branch(x1, y1, a - 0.35 - r() * 0.45, len * 0.72, w * 0.62, depth - 1);
+      branch(x1, y1, a + 0.3 + r() * 0.45, len * 0.68, w * 0.6, depth - 1);
+      if (depth >= 2 && r() < 0.5) clusters.push([x1 + (r() - 0.5) * 20, y1]);
     } else {
       clusters.push([x1, y1]);
     }
   };
-  const clusters: V[] = [];
-  branch(0, 0, -Math.PI / 2 + (r() - 0.5) * 0.2, 90, 16, 4);
-  // 꽃송이 덩어리
+  branch(0, 0, -Math.PI / 2 + (r() - 0.5) * 0.2, 90, 17, 4);
+  const stroke = (col: string, k: number, add = 0, ox = 0) => {
+    ctx.strokeStyle = col;
+    for (const sg of segs) {
+      ctx.lineWidth = sg.w * k + add;
+      ctx.beginPath();
+      ctx.moveTo(sg.x0 + ox * sg.w, sg.y0);
+      ctx.quadraticCurveTo(sg.cx + ox * sg.w, sg.cy, sg.x1 + ox * sg.w, sg.y1);
+      ctx.stroke();
+    }
+  };
+  stroke(barkLine, 1, 3);
+  stroke(bark, 1);
+  stroke(rgba(barkLight, 0.7), 0.3, 0, -0.22);
+  // 뿌리 쪽 퍼짐
+  ellipse(ctx, 0, 2, 26, 6, 0, rgba(barkLine, 0.35));
+  // 꽃 구름: 그늘 덩어리 → 작은 꽃 수백 송이 (위쪽은 밝게) → 흩날리는 꽃잎
   for (const [cx, cy] of clusters) {
-    for (let k = 0; k < 7; k++) {
-      const px = cx + (r() - 0.5) * 50, py = cy + (r() - 0.5) * 36;
-      ellipse(ctx, px, py, 14 + r() * 12, 10 + r() * 8, r(), rgba(shadeHex(r() < 0.5 ? blossom : blossomD, -dark), 0.85));
+    for (let k = 0; k < 5; k++) ellipse(ctx, cx + (r() - 0.5) * 44, cy + (r() - 0.3) * 30, 18 + r() * 14, 12 + r() * 9, r(), rgba(shadeHex(deep, -dark), 0.5));
+  }
+  for (const [cx, cy] of clusters) {
+    const n = 52;
+    for (let k = 0; k < n; k++) {
+      const an = r() * TAU, rad = Math.sqrt(r());
+      const px = cx + Math.cos(an) * rad * 34, py = cy + Math.sin(an) * rad * 25;
+      const up = py < cy - 4;
+      const st = up ? stamps[r() < 0.6 ? 0 : 3] : stamps[1 + Math.floor(r() * 2)];
+      const sz = 0.5 + r() * 0.45;
+      ctx.drawImage(st, px - 12 * sz, py - 12 * sz, 24 * sz, 24 * sz);
     }
-    for (let k = 0; k < 10; k++) {
-      const px = cx + (r() - 0.5) * 56, py = cy + (r() - 0.5) * 40;
-      circle(ctx, px, py, 2.2, rgba('#fff3f6', 0.8 - dark));
-    }
+  }
+  for (let k = 0; k < 14; k++) {
+    const [cx, cy] = clusters[Math.floor(r() * clusters.length)];
+    ellipse(ctx, cx + (r() - 0.5) * 120, cy + 20 + r() * 110, 2.4, 1.4, r() * 3, rgba(shadeHex('#f6bfd0', -dark), 0.85));
   }
   ctx.restore();
 }
@@ -533,40 +583,129 @@ export function paintShrine(): HTMLCanvasElement {
 
 // ---------- 지형 텍스처 ----------
 /** 참고 화면의 돌다리·석축 (가지런한 돌 블록 + 이끼) */
+/** 다듬지 않은 큰 돌 하나 (둥근 모서리, 위는 밝고 아래는 어둡게, 얼룩·금) */
+function roughStone(ctx: Ctx, x: number, y: number, w: number, h: number, base: string, r: () => number) {
+  const rad = Math.min(w, h) * (0.22 + r() * 0.12);
+  const j = () => (r() - 0.5) * 3;
+  const pts: V[] = [
+    [x + rad, y + j()], [x + w * 0.5, y + j() - 1], [x + w - rad, y + j()],
+    [x + w + j(), y + rad], [x + w + j(), y + h * 0.5], [x + w + j(), y + h - rad],
+    [x + w - rad, y + h + j()], [x + w * 0.5, y + h + j()], [x + rad, y + h + j()],
+    [x + j(), y + h - rad], [x + j(), y + h * 0.5], [x + j(), y + rad],
+  ];
+  const g = ctx.createLinearGradient(0, y, 0, y + h);
+  g.addColorStop(0, shadeHex(base, 0.16));
+  g.addColorStop(0.55, base);
+  g.addColorStop(1, shadeHex(base, -0.24));
+  paintShape(ctx, pts, { fill: g, line: 'rgba(52,44,38,0.82)', lw: 2.2 });
+  clipTo(ctx, pts, () => {
+    for (let i = 0; i < 6; i++) ellipse(ctx, x + r() * w, y + r() * h, 6 + r() * w * 0.25, 3 + r() * h * 0.2, r() * 3, rgba(r() < 0.5 ? '#ffffff' : '#3a332c', 0.06 + r() * 0.05));
+    // 윗면 반사광
+    ctx.strokeStyle = 'rgba(255,250,236,0.28)';
+    ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(x + rad * 0.8, y + 3.5); ctx.lineTo(x + w - rad * 0.8, y + 3.5); ctx.stroke();
+    // 금
+    if (r() < 0.55) {
+      ctx.strokeStyle = 'rgba(52,44,38,0.5)';
+      ctx.lineWidth = 1.2;
+      const cx = x + w * (0.2 + r() * 0.6);
+      ctx.beginPath(); ctx.moveTo(cx, y + h * 0.15); ctx.lineTo(cx + (r() - 0.5) * 10, y + h * 0.5); ctx.lineTo(cx + (r() - 0.5) * 14, y + h * 0.8); ctx.stroke();
+    }
+    // 이끼
+    if (r() < 0.45) for (let i = 0; i < 4; i++) ellipse(ctx, x + r() * w, y + h * (0.05 + r() * 0.25), 5 + r() * 10, 2.5 + r() * 3, 0, rgba(r() < 0.5 ? '#7d8f3e' : '#a4ad4e', 0.45));
+  }, 0.5);
+}
+
+/** 참고 화면의 돌다리: 크기가 제각각인 다듬지 않은 큰 돌을 쌓은 석축 (가로·세로 반복) */
 function paintMasonry(size: number): HTMLCanvasElement {
   const [c, ctx] = makeCanvas(size, size);
   const r = rng(21);
-  ctx.fillStyle = '#4a4440';
+  ctx.fillStyle = '#3f3934';
   ctx.fillRect(0, 0, size, size);
-  const rowH = 32;
-  for (let row = 0; row < size / rowH; row++) {
-    const off = row % 2 ? 0 : 32;
-    for (let x = -64 + off; x < size + 64; x += 64) {
-      const w = 64, y = row * rowH;
-      const base = ['#8f877b', '#857c71', '#9a9184', '#7d756c'][Math.floor(r() * 4)];
-      for (const dx of [0, -size, size]) {
-        const X = x + dx;
-        if (X > size || X + w < 0) continue;
-        const g = ctx.createLinearGradient(0, y, 0, y + rowH);
-        g.addColorStop(0, shadeHex(base, 0.12));
-        g.addColorStop(1, shadeHex(base, -0.18));
-        ctx.fillStyle = g;
-        ctx.beginPath();
-        ctx.moveTo(X + 3, y + 3); ctx.lineTo(X + w - 3, y + 3); ctx.lineTo(X + w - 3, y + rowH - 3); ctx.lineTo(X + 3, y + rowH - 3); ctx.closePath();
-        ctx.fill();
-        ctx.strokeStyle = 'rgba(40,34,30,0.7)';
-        ctx.lineWidth = 1.5;
-        ctx.stroke();
-        ctx.strokeStyle = 'rgba(255,255,255,0.18)';
-        ctx.beginPath(); ctx.moveTo(X + 5, y + 5); ctx.lineTo(X + w - 6, y + 5); ctx.stroke();
-      }
+  const rows = [46, 40, 50, 38, 44, 38];
+  const tones = ['#a49b8c', '#968d7f', '#b1a897', '#8c8477', '#a0988d', '#9b9283'];
+  let y = 0;
+  for (let ri = 0; ri < rows.length; ri++) {
+    const rh = rows[ri];
+    // 한 줄의 돌 폭 (합이 size가 되도록)
+    const widths: number[] = [];
+    let left = size;
+    while (left > 0) {
+      let w = 58 + Math.floor(r() * 70);
+      if (left - w < 50) w = left;
+      widths.push(w);
+      left -= w;
     }
+    let x = Math.floor(r() * size);
+    for (const w of widths) {
+      const base = tones[Math.floor(r() * tones.length)];
+      const seed = r();
+      for (const dx of [0, -size]) {
+        for (const dy of ri === rows.length - 1 ? [0, -size] : [0]) {
+          const rr = rng(Math.floor(seed * 1e6));
+          roughStone(ctx, x + dx + 1.5, y + dy + 1.5, w - 3, rh - 3, base, rr);
+        }
+      }
+      x += w;
+    }
+    y += rh;
   }
-  for (let i = 0; i < 40; i++) {
-    const x = r() * size, y = r() * size;
-    for (const dx of [0, -size, size]) ellipse(ctx, x + dx, y, 6 + r() * 12, 3 + r() * 5, 0, rgba(r() < 0.5 ? '#5f7f4e' : '#6f8f5a', 0.35));
+  // 세월의 얼룩: 아래로 흐른 물때·이끼
+  for (let i = 0; i < 18; i++) {
+    const x = r() * size, yy = r() * size;
+    for (const dx of [0, -size, size]) ellipse(ctx, x + dx, yy, 3 + r() * 5, 10 + r() * 18, 0, rgba('#4b5a3a', 0.12));
   }
-  for (let i = 0; i < 120; i++) circle(ctx, r() * size, r() * size, 0.8 + r() * 1.6, rgba(r() < 0.5 ? '#ffffff' : '#000000', 0.07));
+  for (let i = 0; i < 140; i++) circle(ctx, r() * size, r() * size, 0.8 + r() * 1.4, rgba(r() < 0.5 ? '#ffffff' : '#000000', 0.07));
+  return c;
+}
+
+/** 돌다리 아래 아치 (안쪽은 안개 낀 먼 풍경이 비침) */
+export function paintBridgeArch(w = 260, h = 190): HTMLCanvasElement {
+  const [c, ctx] = makeCanvas(w, h);
+  const r = rng(77);
+  const cx = w / 2, top = 18, bot = h;
+  const rx = w * 0.36, ry = h * 0.62;
+  const inner = (): void => {
+    ctx.beginPath();
+    ctx.moveTo(cx - rx, bot);
+    ctx.lineTo(cx - rx, top + ry);
+    ctx.ellipse(cx, top + ry, rx, ry, 0, Math.PI, 0);
+    ctx.lineTo(cx + rx, bot);
+    ctx.closePath();
+  };
+  // 안쪽: 안개 낀 하늘·먼 숲
+  inner();
+  const g = ctx.createLinearGradient(0, top, 0, bot);
+  g.addColorStop(0, '#c9c5de');
+  g.addColorStop(0.55, '#a9b2cf');
+  g.addColorStop(1, '#6f7a92');
+  ctx.fillStyle = g;
+  ctx.fill();
+  ctx.save();
+  inner();
+  ctx.clip();
+  for (let i = 0; i < 9; i++) ellipse(ctx, cx - rx + r() * rx * 2, bot - 20 - r() * 40, 18 + r() * 26, 12 + r() * 14, 0, rgba(r() < 0.5 ? '#5f7466' : '#71856f', 0.55));
+  for (let i = 0; i < 4; i++) ellipse(ctx, cx - rx + r() * rx * 2, top + ry * (0.6 + r() * 0.5), 30 + r() * 20, 6, 0, rgba('#ffffff', 0.25));
+  // 아치 안쪽 그늘
+  const sh = ctx.createLinearGradient(cx - rx, 0, cx + rx, 0);
+  sh.addColorStop(0, 'rgba(20,18,30,0.55)'); sh.addColorStop(0.18, 'rgba(20,18,30,0)'); sh.addColorStop(0.82, 'rgba(20,18,30,0)'); sh.addColorStop(1, 'rgba(20,18,30,0.45)');
+  ctx.fillStyle = sh;
+  ctx.fillRect(0, 0, w, h);
+  const st = ctx.createLinearGradient(0, top, 0, top + ry * 0.7);
+  st.addColorStop(0, 'rgba(20,18,30,0.5)'); st.addColorStop(1, 'rgba(20,18,30,0)');
+  ctx.fillStyle = st;
+  ctx.fillRect(0, 0, w, h);
+  ctx.restore();
+  // 아치 돌 (홍예석)
+  const n = 11;
+  for (let i = 0; i < n; i++) {
+    const a0 = Math.PI + (i / n) * Math.PI, a1 = Math.PI + ((i + 1) / n) * Math.PI;
+    const o = 16;
+    const p = (a: number, k: number): V => [cx + Math.cos(a) * (rx + k), top + ry + Math.sin(a) * (ry + k)];
+    const pts: V[] = [p(a0 + 0.01, 0), p(a1 - 0.01, 0), p(a1 - 0.01, o), p(a0 + 0.01, o)];
+    const base = ['#a49b8c', '#968d7f', '#b1a897'][i % 3];
+    paintShape(ctx, pts, { fill: base, line: 'rgba(52,44,38,0.8)', lw: 2 }, );
+  }
   return c;
 }
 
@@ -599,24 +738,31 @@ export function paintGroundBody(style: 'grass' | 'stone' | 'cave', size = 256): 
 
 export function paintGroundTop(style: 'grass' | 'stone' | 'cave', w = 256, h = 48): HTMLCanvasElement {
   if (style === 'grass') {
-    // 판석 길 + 가장자리 풀
+    // 돌다리 윗면: 크기가 제각각인 판석 + 노란빛 이끼·풀 (참고 화면처럼)
     const [c, ctx] = makeCanvas(w, h);
     const r = rng(33);
-    ctx.fillStyle = '#6d665d';
-    ctx.fillRect(0, 18, w, 18);
-    for (let x = 0; x < w; x += 42) {
-      const g = ctx.createLinearGradient(0, 16, 0, 34);
-      g.addColorStop(0, '#b3ab9c'); g.addColorStop(1, '#7c7468');
-      ctx.fillStyle = g;
-      ctx.fillRect(x + 1, 17, 40, 16);
-      ctx.strokeStyle = 'rgba(40,34,30,0.6)'; ctx.lineWidth = 1.2; ctx.strokeRect(x + 1, 17, 40, 16);
+    ctx.fillStyle = '#5d564d';
+    ctx.fillRect(0, 20, w, 16);
+    let x = 0;
+    while (x < w) {
+      let sw = 44 + Math.floor(r() * 46);
+      if (w - (x + sw) < 36) sw = w - x;
+      const base = ['#b7ae9d', '#aaa190', '#c0b7a5', '#a39a89'][Math.floor(r() * 4)];
+      roughStone(ctx, x + 1, 18, sw - 2, 18, base, r);
+      x += sw;
     }
-    for (let i = 0; i < 60; i++) {
-      const x = r() * w, hh = 6 + r() * 14;
-      for (const dx of [0, -w, w]) tuft(ctx, [[x + dx, 19], [x + dx + (r() - 0.5) * 4, 19 - hh * 0.6], [x + dx + (r() - 0.5) * 8, 19 - hh]], 3, r() < 0.5 ? '#6f9a4e' : '#93bf62');
+    // 이끼 낀 가장자리
+    for (let i = 0; i < 26; i++) {
+      const xx = r() * w;
+      for (const dx of [0, -w, w]) ellipse(ctx, xx + dx, 19 + r() * 3, 8 + r() * 16, 3 + r() * 3, 0, rgba(r() < 0.5 ? '#8f9a3e' : '#b3b552', 0.85));
     }
-    for (let i = 0; i < 7; i++) circle(ctx, r() * w, 8 + r() * 10, 2.2, r() < 0.5 ? '#f6e27a' : '#f5b3c6');
-    for (let i = 0; i < 10; i++) ellipse(ctx, r() * w, 36 + r() * 4, 8 + r() * 10, 3 + r() * 3, 0, rgba('#5f8a4a', 0.75));
+    for (let i = 0; i < 80; i++) {
+      const xx = r() * w, hh = 5 + r() * 13;
+      for (const dx of [0, -w, w]) tuft(ctx, [[xx + dx, 20], [xx + dx + (r() - 0.5) * 4, 20 - hh * 0.6], [xx + dx + (r() - 0.5) * 8, 20 - hh]], 2.6, ['#7f9a3f', '#a8b84e', '#c9c35c', '#6d8a3a'][Math.floor(r() * 4)]);
+    }
+    for (let i = 0; i < 9; i++) circle(ctx, r() * w, 8 + r() * 10, 2, ['#f6e27a', '#f5b3c6', '#ffffff'][Math.floor(r() * 3)]);
+    // 아래로 늘어진 이끼
+    for (let i = 0; i < 12; i++) ellipse(ctx, r() * w, 37 + r() * 4, 6 + r() * 10, 2.5 + r() * 3, 0, rgba('#6f7f3a', 0.7));
     return c;
   }
   const [c, ctx] = makeCanvas(w, h);

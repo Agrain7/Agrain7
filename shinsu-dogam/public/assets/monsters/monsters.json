@@ -1,0 +1,38 @@
+{
+ "boar": {
+  "file": "assets/monsters/boar.png",
+  "w": 250,
+  "h": 167,
+  "source": "assets-src/reference/gameplay_reference.png"
+ },
+ "fox": {
+  "file": "assets/monsters/fox.png",
+  "w": 124,
+  "h": 110,
+  "base": "wolf_1"
+ },
+ "bat": {
+  "file": "assets/monsters/bat.png",
+  "w": 112,
+  "h": 113,
+  "base": "hawk_1"
+ },
+ "dokkaebi": {
+  "file": "assets/monsters/dokkaebi.png",
+  "w": 122,
+  "h": 112,
+  "base": "haetae_0"
+ },
+ "rock": {
+  "file": "assets/monsters/rock.png",
+  "w": 176,
+  "h": 153,
+  "base": "hyeonmu_1"
+ },
+ "boss": {
+  "file": "assets/monsters/boss.png",
+  "w": 304,
+  "h": 176,
+  "base": "baekho_2"
+ }
+}

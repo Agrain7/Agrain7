@@ -318,7 +318,8 @@ export interface RigJob {
   finish(): RigResult;
 }
 
-export function rigJob(img: ImageData, def: RigDef, seat: V): RigJob {
+/** counts: 만들 동작·프레임 수 (생략하면 RIG_FRAMES 전체) — 몬스터는 필요한 동작만 만들어 메모리를 아낀다 */
+export function rigJob(img: ImageData, def: RigDef, seat: V, counts: Partial<Record<RigAnim, number>> = RIG_FRAMES): RigJob {
   let prep: Prepared | null = null;
   const w = img.width, h = img.height;
   const padX = Math.round(w * 0.16) + 4;
@@ -326,7 +327,7 @@ export function rigJob(img: ImageData, def: RigDef, seat: V): RigJob {
   const padBot = Math.round(h * 0.05) + 2;
   const fw = w + padX * 2, fh = padTop + h + padBot;
   const list: { anim: RigAnim; i: number; n: number }[] = [];
-  for (const [anim, n] of Object.entries(RIG_FRAMES) as [RigAnim, number][]) for (let i = 0; i < n; i++) list.push({ anim, i, n });
+  for (const [anim, n] of Object.entries(counts) as [RigAnim, number][]) for (let i = 0; i < n; i++) list.push({ anim, i, n });
   const cols = Math.max(1, Math.min(list.length, Math.floor(4096 / fw)));
   const rows = Math.ceil(list.length / cols);
   let canvas: HTMLCanvasElement | null = null;
@@ -435,7 +436,7 @@ export function rigJob(img: ImageData, def: RigDef, seat: V): RigJob {
         k++;
         if (performance.now() - t0 > budgetMs && k < list.length) return null;
       }
-      result = { canvas: canvas!, frames, padX, padTop, fw, fh, anims: { ...RIG_FRAMES } };
+      result = { canvas: canvas!, frames, padX, padTop, fw, fh, anims: { ...counts } as Record<RigAnim, number> };
       job.done = true;
       return result;
     },

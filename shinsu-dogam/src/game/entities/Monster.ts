@@ -3,7 +3,7 @@ import Phaser from 'phaser';
 import type { WorldScene } from '../scenes/WorldScene.ts';
 import type { MonsterDef } from '../../data/types.ts';
 import { scaleMonster } from '../../data/monsters.ts';
-import { ensureMonster, monsterBox, monsterScale } from '../textures.ts';
+import { ensureMonster, monsterArtHeight, monsterBox, monsterScale } from '../textures.ts';
 import { GRAVITY, MAX_FALL } from '../config.ts';
 
 export class Monster {
@@ -26,6 +26,7 @@ export class Monster {
   homeY: number;
   key: string;
   boss = false;
+  artH = 0;
 
   constructor(public scene: WorldScene, public def: MonsterDef, x: number, y: number, tier: number) {
     const s = scaleMonster(def, tier);
@@ -43,6 +44,7 @@ export class Monster {
     this.body.setMaxVelocity(1600, MAX_FALL);
     const box = monsterBox(def.id);
     this.spr = scene.add.sprite(x, y, this.key, def.flying ? 'fly_0' : 'idle_0').setOrigin(box.ox / box.w, box.oy / box.h).setScale(monsterScale(def.id)).setDepth(8);
+    this.artH = monsterArtHeight(def.id);
     this.hpBar = scene.add.graphics().setDepth(9);
     this.play(def.flying ? 'fly' : 'idle');
     this.cd = 0.5 + Math.random();
@@ -132,7 +134,8 @@ export class Monster {
     const g = this.hpBar;
     g.clear();
     const w = Math.max(50, this.body.width * 0.9);
-    const x = this.x - w / 2, y = this.body.top - 18 - (this.def.ai === 'caster' ? 10 : 0);
+    const top = Math.min(this.body.top, this.spr.y - this.artH);
+    const x = this.x - w / 2, y = top - 14;
     g.fillStyle(0x1d1a2b, 0.8);
     g.fillRoundedRect(x - 2, y - 2, w + 4, 10, 4);
     g.fillStyle(this.def.elite ? 0xe2b14c : 0xd63c34, 1);

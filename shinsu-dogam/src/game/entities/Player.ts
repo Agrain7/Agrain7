@@ -275,7 +275,9 @@ export class Player {
         this.jumpCut = false;
         this.squash = 0.85;
         audio.play('jump');
-        this.scene.combat.ring(this.x, this.bottom, mv.glide ? 'fx_ring_white' : 'fx_ring_gold', 0.35);
+        const ringKey = this.def.id === 'hyeonmu' ? 'fx_ring_blue' : mv.glide ? 'fx_ring_white' : 'fx_ring_gold';
+        this.scene.combat.ring(this.x, this.bottom, ringKey, 0.35);
+        if (this.def.id === 'hyeonmu') this.scene.combat.ring(this.x, this.bottom + 6, 'fx_water', 0.9, 300);
       }
       // 가변 점프 높이
       if (!jumpHeld && b.velocity.y < -250 && !this.jumpCut) {

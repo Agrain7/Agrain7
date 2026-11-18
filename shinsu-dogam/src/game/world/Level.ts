@@ -45,6 +45,10 @@ export class Level {
       const style = g.style ?? 'grass';
       s.add.tileSprite(g.x0, g.top + 18, w, h, `ground_${style}`).setOrigin(0).setDepth(-10);
       s.add.tileSprite(g.x0 - 6, g.top - 22, w + 12, 48, `top_${style}`).setOrigin(0).setDepth(-9);
+      // 돌다리 아치 (참고 화면처럼 다리 아래로 먼 풍경이 비침)
+      if (style === 'grass' && w > 520) {
+        for (let ax = g.x0 + 170; ax + 270 < g.x1 - 40; ax += 620) { const a = s.add.image(ax, g.top + 44, 'bridge_arch').setOrigin(0).setDepth(-9.7); if (map.sky === 'night') a.setTint(0x7880b4); }
+      }
       // 절벽 가장자리 그림자
       const edge = s.add.graphics().setDepth(-9.5);
       edge.fillStyle(0x000000, 0.25);

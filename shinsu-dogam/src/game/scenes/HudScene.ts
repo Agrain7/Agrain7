@@ -203,6 +203,8 @@ export class HudScene extends Phaser.Scene {
   private faceTexture() {
     const outfit = store.state.data.cosmetics.outfit;
     this.lastOutfit = outfit;
+    // 기본 의상: 참고 화면의 소녀 초상을 그대로 사용 (tools/extract_backdrop.py)
+    if (outfit === 'outfit_default' && this.textures.exists('ref_portrait')) return 'ref_portrait';
     const key = `face_${outfit}`;
     if (this.textures.exists(key)) return key;
     const src = this.textures.get(`rider_${outfit}`);

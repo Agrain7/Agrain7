@@ -50,8 +50,11 @@ npm run dev      # 게임 서버 실행
 | `npm run dev` | 개발 서버 (코드 수정 시 자동 새로고침) |
 | `npm run build` | 배포용 파일 생성 → `dist/` 폴더 |
 | `npm run preview` | 만든 배포용 파일을 미리보기 |
-| `npm test` | 게임 로직 단위 테스트 (19개) |
-| `npm run test:e2e` | 실제 브라우저로 플레이 흐름 자동 검사 (빌드 후 실행, 결과 스크린샷 `test-results/`) |
+| `npm test` | 게임 로직 단위 테스트 (24개) |
+| `npm run test:e2e` | 실제 브라우저로 플레이 흐름 자동 검사 23항목 (빌드 후 실행, 결과 스크린샷 `test-results/`) |
+| `python3 tools/extract_beasts.py` | 도감 원화 → 영물 27장 (기린 얼굴 채움·늑대/백호 입 다물기 보정 포함) |
+| `python3 tools/extract_boar.py && python3 tools/make_monsters.py` | 참고 화면 산돼지 + 원화 색 변환 몬스터 → `public/assets/monsters/` |
+| `python3 tools/extract_backdrop.py` | 참고 화면 궁궐 절벽 원경(황혼·밤·안개) + HUD 초상 |
 | `npm run typecheck` | 타입 검사 |
 | `python3 tools/pack_sprites.py` | 받은 그림(`art-in/`) 검사·변환 → 게임에 자동 적용 ([ART_REQUEST](docs/ART_REQUEST.md)) |
 | `npm run build:artifact` | Claude 아티팩트(웹 페이지) 게시용 한 장짜리 페이지 생성 → `dist-artifact/` (Phaser는 CDN, 글꼴은 Google Fonts) |
@@ -80,6 +83,8 @@ npm run dev      # 게임 서버 실행
 shinsu-dogam/
 ├─ index.html                 게임 페이지
 ├─ public/assets/mounts/      영물 일러스트 27장 (원화에서 추출, 투명 배경, 오른쪽 방향)
+├─ public/assets/monsters/    몬스터 6종 (참고 화면 산돼지 + 원화 색 변환)
+├─ public/assets/backgrounds/ 참고 화면 궁궐 절벽 원경 (황혼·밤·안개)
 ├─ assets-src/reference/      사용자 제공 원본 참고 이미지 2장
 ├─ src/
 │  ├─ main.ts                 게임 시작점 (Phaser 설정)

@@ -9,6 +9,7 @@ import { readPixels, silhouette, tintedImage } from '../art/mountFrames.ts';
 import { rigJob, type RigJob, type RigResult } from '../art/rig.ts';
 import { rigFor } from '../data/mountRigs.ts';
 import { MOUNT_ART, artKey } from '../data/mountArt.ts';
+import { MONSTER_ART, monsterImageKey } from '../data/monsterArt.ts';
 import { COSMETICS } from '../data/cosmetics.ts';
 import * as W from '../art/world.ts';
 import * as O from '../art/objects.ts';
@@ -229,7 +230,7 @@ export function ensurePortrait(scene: Phaser.Scene, mountId: string, stage: numb
 // ---------- 라이더 ----------
 export interface RiderMeta { ox: number; oy: number; scaleMul: number; face: [number, number, number] }
 const riderMetas = new Map<string, RiderMeta>();
-const RIDER_DEFAULT: RiderMeta = { ox: 54 / 120, oy: 104 / 130, scaleMul: 1, face: [56, 46, 32] };
+const RIDER_DEFAULT: RiderMeta = { ox: 94 / 160, oy: 104 / 130, scaleMul: 1, face: [96, 46, 32] };
 export function riderMeta(key: string): RiderMeta {
   return riderMetas.get(key) ?? RIDER_DEFAULT;
 }
@@ -252,6 +253,45 @@ export function ensureRider(scene: Phaser.Scene, outfit: string): string {
 }
 
 // ---------- 몬스터 ----------
+// 몬스터: 받은 프레임 그림 > 몬스터 일러스트(참고 산돼지·어둠에 물든 영물) 리깅 > 코드 그림
+const monsterRigInfo = new Map<string, { fw: number; fh: number; ox: number; oy: number }>();
+const monsterJobs = new Map<string, RigJob>();
+
+function monsterJob(scene: Phaser.Scene, id: string): RigJob | null {
+  const art = MONSTER_ART[id];
+  if (!art || !scene.textures.exists(monsterImageKey(id))) return null;
+  let job = monsterJobs.get(id);
+  if (!job) {
+    const img = scene.textures.get(monsterImageKey(id)).getSourceImage() as HTMLImageElement;
+    job = rigJob(readPixels(img, art.w, art.h), rigFor(art.rig, art.motion), [0.5, 0.5], art.frames);
+    monsterJobs.set(id, job);
+  }
+  return job;
+}
+
+function registerMonsterRig(scene: Phaser.Scene, id: string, res: RigResult): string {
+  const key = `mon_${id}`;
+  const art = MONSTER_ART[id];
+  addCanvas(scene, key, res.canvas);
+  const tex = scene.textures.get(key);
+  for (const f of res.frames) tex.add(f.name, 0, f.x, f.y, f.w, f.h);
+  for (const [name, a] of Object.entries(art.anims)) {
+    const n = res.anims[a.from];
+    if (!n) continue;
+    const akey = `${key}:${name}`;
+    if (scene.anims.exists(akey)) scene.anims.remove(akey);
+    const idx = a.frames ?? Array.from({ length: n }, (_, i) => i);
+    scene.anims.create({ key: akey, frames: idx.map((i) => ({ key, frame: `${a.from}_${i}` })), frameRate: a.fps, repeat: a.repeat });
+  }
+  // 처음 보여 줄 프레임 이름 맞추기 (idle_0 / fly_0)
+  for (const [alias, from] of [['idle', art.anims.idle?.from], ['fly', art.anims.fly?.from ?? art.anims.idle?.from]] as const) {
+    if (from && !tex.has(`${alias}_0`) && tex.has(`${from}_0`)) { const f = tex.get(`${from}_0`); tex.add(`${alias}_0`, 0, f.cutX, f.cutY, f.cutWidth, f.cutHeight); }
+  }
+  monsterRigInfo.set(id, { fw: res.fw, fh: res.fh, ox: res.fw / 2, oy: res.padTop + art.h });
+  monsterJobs.delete(id);
+  return key;
+}
+
 export function ensureMonster(scene: Phaser.Scene, id: string): string {
   const key = `mon_${id}`;
   if (scene.textures.exists(key)) return key;
@@ -261,20 +301,56 @@ export function ensureMonster(scene: Phaser.Scene, id: string): string {
     registerSheet(scene, key, set, scene.textures.get(sheetKey(set)).getSourceImage() as HTMLImageElement, ANIM_TIMING as Record<string, { fps: number; repeat: number }>, want);
     return key;
   }
+  const job = monsterJob(scene, id);
+  if (job) return registerMonsterRig(scene, id, job.finish());
   const p = MONSTER_PAINTERS[id];
   const sheet = buildSheet(p.box, p.anims, (ctx, pose) => p.draw(ctx, pose));
   addFramesAndAnims(scene, key, sheet.canvas, sheet.frames, p.anims as Record<string, number>);
   return key;
 }
+
+/** 부팅 때 몬스터 리깅을 나눠서 미리 계산 (progress: 0..1) */
+export async function prewarmMonsters(scene: Phaser.Scene, progress?: (p: number) => void) {
+  const ids = Object.keys(MONSTER_ART).filter((id) => !spriteSets.has(`monsters/${id}`) && !scene.textures.exists(`mon_${id}`));
+  let done = 0;
+  for (const id of ids) {
+    const job = monsterJob(scene, id);
+    if (!job) { done++; continue; }
+    await new Promise<void>((resolve) => {
+      const tick = () => {
+        const res = job.step(20);
+        progress?.((done + (res ? 1 : 0.5)) / ids.length);
+        if (res) { registerMonsterRig(scene, id, res); resolve(); } else scene.time.delayedCall(1, tick);
+      };
+      tick();
+    });
+    done++;
+  }
+}
+
 export function monsterBox(id: string) {
   const set = spriteSets.get(`monsters/${id}`);
   if (set) return { w: set.fw, h: set.fh, ox: set.origin[0] * set.fw, oy: set.origin[1] * set.fh };
+  const ri = monsterRigInfo.get(id);
+  if (ri) return { w: ri.fw, h: ri.fh, ox: ri.ox, oy: ri.oy };
   return MONSTER_PAINTERS[id].box;
 }
 /** 받은 몬스터 그림은 기존 크기에 맞춰 축소·확대 */
 export function monsterScale(id: string) {
   const set = spriteSets.get(`monsters/${id}`);
-  return set ? (MONSTER_PAINTERS[id].box.h * 0.8) / Math.max(1, set.contentH) : 1;
+  if (set) return (MONSTER_PAINTERS[id].box.h * 0.8) / Math.max(1, set.contentH);
+  const art = MONSTER_ART[id];
+  if (art && monsterRigInfo.has(id)) return art.displayH / art.h;
+  return 1;
+}
+/** 화면에 보이는 몬스터 그림 높이 (체력바 위치용) */
+export function monsterArtHeight(id: string) {
+  const art = MONSTER_ART[id];
+  if (art && monsterRigInfo.has(id)) return art.displayH;
+  const set = spriteSets.get(`monsters/${id}`);
+  if (set) return MONSTER_PAINTERS[id].box.h * 0.8;
+  const b = MONSTER_PAINTERS[id].box;
+  return b.oy * 0.85;
 }
 
 // ---------- 하늘/배경 ----------
@@ -309,6 +385,7 @@ export function generateCommon(scene: Phaser.Scene) {
     ['fg_leaves', () => W.paintForegroundLeaves()],
     ['shrine', () => W.paintShrine()],
     ['ground_grass', () => W.paintGroundBody('grass')],
+    ['bridge_arch', () => W.paintBridgeArch()],
     ['ground_stone', () => W.paintGroundBody('stone')],
     ['ground_cave', () => W.paintGroundBody('cave')],
     ['top_grass', () => W.paintGroundTop('grass')],

@@ -355,6 +355,20 @@ export const MOUNT_RIGS: Record<string, BoneDef[]> = {
   ]),
 };
 
+// ---------------- 몬스터 (참고 화면의 산돼지) ----------------
+// 도감 원화로 만든 몬스터(이리·까마귀·도깨비 짐승·바위 정령·흑운 산군)는 원래 영물의 리그를 그대로 쓴다.
+export const MONSTER_RIGS: Record<string, BoneDef[]> = {
+  mon_boar: B([
+    chain('tail', R(0, 0.16, 0.22, 0.6), [[0.21, 0.5], [0.12, 0.46], [0.05, 0.36], [0.07, 0.24]], { amp: 10, runAmp: 18 }),
+    sway('mane', R(0.18, 0, 0.62, 0.3), [0.42, 0.32], 3),
+    head('head', [[0.62, 0.16], [1, 0.16], [1, 0.8], [0.62, 0.8]], [0.66, 0.6]),
+    ...quadLegs(
+      [[R(0.02, 0.62, 0.26, 1), [0.2, 0.64]], [R(0.26, 0.66, 0.47, 1), [0.36, 0.68]]],
+      [[R(0.48, 0.64, 0.66, 1), [0.56, 0.66]], [R(0.66, 0.78, 0.9, 1), [0.71, 0.78]]],
+    ),
+  ]),
+};
+
 export function rigFor(key: string, kind: MotionKind): RigDef {
-  return { bones: MOUNT_RIGS[key] ?? [], global: GLOBAL[kind], foot: [0.5, 1] };
+  return { bones: MOUNT_RIGS[key] ?? MONSTER_RIGS[key] ?? [], global: GLOBAL[kind], foot: [0.5, 1] };
 }

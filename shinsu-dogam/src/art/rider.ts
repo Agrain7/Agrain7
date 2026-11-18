@@ -20,7 +20,8 @@ const LINE = '#2a1e26';
 const SKIN = '#fbe3cf';
 const HAIR = '#1f1a26';
 
-export const RIDER_BOX: FrameBox = { w: 120, h: 130, ox: 54, oy: 104 };
+// 왼쪽 여유 공간: 뒤로 휘날리는 띠(피백)가 들어갈 자리
+export const RIDER_BOX: FrameBox = { w: 160, h: 130, ox: 94, oy: 104 };
 export const RIDER_ANIMS: Partial<Record<AnimName, number>> = { idle: 4, run: 4, attack: 2, hit: 1, cast: 2, fly: 4 };
 
 export function drawRider(ctx: Ctx, p: Pose, o: Outfit) {
@@ -44,6 +45,21 @@ export function drawRider(ctx: Ctx, p: Pose, o: Outfit) {
   ctx.save();
   ctx.translate(0, -14);
   ctx.rotate(lean);
+  // 뒤로 길게 휘날리는 띠 (참고 화면의 붉은 피백 + 크림색 안 띠)
+  if (o.extra !== 'armor') {
+    const sash = (x0: number, y0: number, len: number, ph: number, w0: number, col: string, lift: number) => {
+      const pts: V[] = [];
+      for (let k = 0; k <= 6; k++) {
+        const u = k / 6;
+        const amp = (1.5 + u * 7) * (0.45 + wind * 0.75);
+        pts.push([x0 - u * len * (0.75 + 0.25 * wind), y0 - u * lift + Math.sin((t - u * 0.8 + ph) * TAU) * amp]);
+      }
+      const sp = sampleCurve(pts, 14);
+      paintShape(ctx, tubeOutline(sp, sp.map((_, i) => w0 * (1 - i / sp.length * 0.45) + (i > sp.length - 4 ? 1.2 : 0)), true, true), { fill: col, line: LINE, lw: 1.1, shadow: shadeHex(col, -0.35), shadowAmt: 0.5 });
+    };
+    sash(-6, -14, 70, 0.5, 4.2, o.extra === 'shawl' ? rgba(o.trim, 0.8) : '#f3ead6', 10);
+    sash(-8, -22, 82, 0, 5.2, o.ribbon, 18);
+  }
   // 날개옷 (선녀)
   if (o.extra === 'shawl') {
     const s = Math.sin(t * TAU) * 6 * wind;
@@ -92,6 +108,8 @@ export function drawRider(ctx: Ctx, p: Pose, o: Outfit) {
   // 뒷머리 + 댕기
   const sway = Math.sin(t * TAU) * 4 * wind;
   tuft(ctx, [[-10, -2], [-20, 6 + sway * 0.3], [-24 - wind * 6, 18 + sway]], 12, HAIR, LINE, 1.2);
+  // 길게 늘어진 뒷머리 (바람에 날림)
+  tuft(ctx, [[-8, -8], [-22, -2 + sway * 0.4], [-36 - wind * 8, 4 + sway], [-46 - wind * 12, 8 + sway * 1.3]], 10, HAIR, LINE, 1.2);
   const rib = sampleCurve([[-14, -14], [-28, -10 + sway], [-42 - wind * 6, -8 + sway * 1.6], [-50 - wind * 10, -2 + sway]], 12);
   paintShape(ctx, tubeOutline(rib, rib.map((_, i) => 5 - i * 0.25), true, true), { fill: o.ribbon, line: LINE, lw: 1.1 });
   // 얼굴
@@ -109,12 +127,19 @@ export function drawRider(ctx: Ctx, p: Pose, o: Outfit) {
   paintShape(ctx, [[-14, -4], [-12, -14], [0, -18], [14, -12], [17, -2], [12, -8], [4, -6], [-4, -10]], { fill: HAIR, line: LINE, lw: 1.4, tension: 0.4 });
   // 옆머리
   tuft(ctx, [[14, -6], [17, 4], [15, 12]], 5, HAIR, LINE, 1);
-  // 쪽머리 + 비녀
-  circle(ctx, -4, -18, 8, HAIR, LINE, 1.4);
+  // 올림머리(위로 둥글게) + 비녀 + 꽃 장식 (참고 화면의 소녀처럼)
+  circle(ctx, -3, -21, 9.5, HAIR, LINE, 1.4);
+  circle(ctx, -9, -27, 6, HAIR, LINE, 1.2);
   ctx.strokeStyle = o.hairOrnament;
   ctx.lineWidth = 2.4;
-  ctx.beginPath(); ctx.moveTo(-16, -20); ctx.lineTo(8, -16); ctx.stroke();
-  circle(ctx, 9, -16, 2.6, o.hairOrnament, LINE, 1);
+  ctx.beginPath(); ctx.moveTo(-17, -23); ctx.lineTo(9, -19); ctx.stroke();
+  circle(ctx, 10, -19, 2.6, o.hairOrnament, LINE, 1);
+  for (let k = 0; k < 5; k++) {
+    const an = (k * TAU) / 5 - 0.3;
+    ellipse(ctx, 3 + Math.cos(an) * 3.2, -27 + Math.sin(an) * 3.2, 2.6, 1.8, an, '#f7c6d4', rgba(LINE, 0.7), 0.7);
+  }
+  circle(ctx, 3, -27, 1.6, '#d6455a');
+  circle(ctx, -2, -30, 2.2, o.ribbon, rgba(LINE, 0.7), 0.7);
   if (o.extra === 'armor') { ctx.fillStyle = '#c3352c'; ctx.fillRect(-13, -12, 28, 4); tuft(ctx, [[-13, -10], [-24, -6 + sway], [-32, -10 + sway]], 4, '#c3352c'); }
   if (o.extra === 'royal') { paintShape(ctx, [[-10, -24], [-4, -32], [4, -32], [10, -24]], { fill: '#e2b14c', line: LINE, lw: 1.2, tension: 0.2 }); }
   if (o.extra === 'fur') { ellipse(ctx, -2, -16, 14, 6, 0, '#fbfaf5', rgba('#b8a48a', 0.8), 1); }
@@ -140,5 +165,4 @@ export function drawRider(ctx: Ctx, p: Pose, o: Outfit) {
   ctx.restore();
   // 허리 장신구 (노리개)
   tassel(ctx, -6, -6, 0.45, o.trim, '#e2b14c', Math.sin(t * TAU) * 0.3 * wind + 0.2);
-  void shadeHex;
 }

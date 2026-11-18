@@ -1,4 +1,4 @@
-// Claude 아티팩트용 페이지 생성: dist-artifact/index.html (게임 코드 인라인) + assets/mounts/*.png
+// Claude 아티팩트용 페이지 생성: dist-artifact/index.html (게임 코드 인라인) + assets/{mounts,monsters,backgrounds,ui}/*.png
 // 사용법: node tools/build-artifact.mjs
 import { execSync } from 'node:child_process';
 import { readFileSync, writeFileSync, mkdirSync, copyFileSync, readdirSync, cpSync } from 'node:fs';
@@ -7,6 +7,11 @@ execSync('npx vite build --config vite.artifact.config.ts', { stdio: 'inherit' }
 const js = readFileSync('dist-artifact/game.js', 'utf8').replace(/<\/script/gi, '<\\/script');
 mkdirSync('dist-artifact/assets/mounts', { recursive: true });
 for (const f of readdirSync('public/assets/mounts')) if (f.endsWith('.png')) copyFileSync(`public/assets/mounts/${f}`, `dist-artifact/assets/mounts/${f}`);
+// 몬스터 그림, 참고 화면 원경 파노라마, HUD 초상
+for (const dir of ['monsters', 'backgrounds', 'ui']) {
+  mkdirSync(`dist-artifact/assets/${dir}`, { recursive: true });
+  for (const f of readdirSync(`public/assets/${dir}`)) if (f.endsWith('.png')) copyFileSync(`public/assets/${dir}/${f}`, `dist-artifact/assets/${dir}/${f}`);
+}
 // 받은 그림(프레임 시트·배경)도 함께
 cpSync('public/assets/sprites', 'dist-artifact/assets/sprites', { recursive: true });
 

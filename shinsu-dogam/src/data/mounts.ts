@@ -127,9 +127,9 @@ export const MOUNTS: Record<MountId, MountDef> = {
     lore: '거북과 뱀이 한 몸을 이룬 북쪽의 수호신. 느리지만 어떤 공격도 막아 내는 등껍질을 지녔다.',
     base: { hp: 150, atk: 11, def: 10 }, growth: { hp: 18, atk: 2.0, def: 1.6 },
     stages: stages([
-      { movement: mv({ runSpeed: 240, jumpVelocity: 680, accel: 1600 }), attack: 'bite', special: 'waterShield', abilities: ['높은 방어력', '물의 보호막'], body: { w: 66, h: 46 } },
-      { movement: mv({ runSpeed: 260, jumpVelocity: 700, accel: 1700 }), attack: 'bite', special: 'tideShot', abilities: ['물살', '수중 이동 (추후)'], body: { w: 90, h: 58 } },
-      { movement: mv({ runSpeed: 280, jumpVelocity: 720, accel: 1800 }), attack: 'bite', special: 'blackTortoiseWard', abilities: ['현무 결계', '보호막'], body: { w: 120, h: 66 } },
+      { movement: mv({ runSpeed: 240, jumpVelocity: 690, accel: 1600, airJumps: 1, airJumpVelocity: 580 }), attack: 'bite', special: 'waterShield', abilities: ['높은 방어력', '물방울 이단 점프', '물의 보호막'], body: { w: 66, h: 46 } },
+      { movement: mv({ runSpeed: 260, jumpVelocity: 720, accel: 1700, airJumps: 1, airJumpVelocity: 640 }), attack: 'bite', special: 'tideShot', abilities: ['물살', '물방울 이단 점프', '수중 이동 (추후)'], body: { w: 90, h: 58 } },
+      { movement: mv({ runSpeed: 280, jumpVelocity: 760, accel: 1800, airJumps: 1, airJumpVelocity: 700 }), attack: 'bite', special: 'blackTortoiseWard', abilities: ['물방울 이단 점프', '현무 결계', '보호막'], body: { w: 120, h: 66 } },
     ]),
   },
   girin: {

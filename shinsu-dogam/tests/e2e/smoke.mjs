@@ -150,6 +150,26 @@ try {
   const fly = await world(page, (w) => ({ y: w.player.y, flying: w.player.flying, stage: w.player.st.stage, id: w.player.def.id }));
   await page.keyboard.up('Space');
   check('청룡 각성체 자유 비행', fly.flying && y0 - fly.y > 200, JSON.stringify({ ...fly, rise: Math.round(y0 - fly.y) }));
+  // 현무 이단 점프 (사용자 제보 버그)
+  await world(page, (w, s) => { s.obtainMount('hyeonmu'); return 1; });
+  await sleep(900); // 획득 연출이 뜰 때까지
+  for (let i = 0; i < 4; i++) {
+    if ((await activeScenes(page)).includes('World')) break; // 획득 연출 중에는 월드가 멈춰 있다
+    await page.mouse.click(510, 610);
+    await sleep(700);
+  }
+  await world(page, (w, s) => { s.data.activeMount = 'hyeonmu'; w.player.rebuild(); w.player.body.reset(500, 800); return 1; });
+  await sleep(700);
+  await page.keyboard.press('Space');
+  await sleep(260);
+  const j1 = await world(page, (w) => ({ air: w.player.airJumps, id: w.player.def.id, g: w.player.grounded }));
+  await page.keyboard.press('Space');
+  await sleep(250); // 헤드리스 렌더는 한 프레임이 길어 충분히 기다린다
+  const j2 = await world(page, (w) => ({ air: w.player.airJumps, g: w.player.grounded }));
+  check('현무 이단 점프', j1.id === 'hyeonmu' && !j1.g && j1.air === 1 && j2.air === 0, JSON.stringify({ j1, j2 }));
+  // 참고 화면 몬스터 (산돼지 원화 리깅)
+  const mon = await world(page, (w) => ({ boar: w.textures.exists('mon_boar') && w.anims.exists('mon_boar:run'), boss: w.textures.exists('mon_boss') && w.anims.exists('mon_boss:cast') }));
+  check('참고 화면 몬스터 그림 (산돼지·흑운 산군)', mon.boar && mon.boss, JSON.stringify(mon));
   await page.screenshot({ path: `${OUT}/07_fly.png` });
   // 저장 → 새로고침 → 이어하기
   await page.evaluate(() => window.__SD__.store.state.save());
