@@ -21,6 +21,7 @@ export class Level {
   goal: Rect;
   shrine?: Rect & { sprite: Phaser.GameObjects.Image };
   bossWall?: Phaser.GameObjects.Zone;
+  private bossWallFx?: Phaser.GameObjects.Rectangle;
 
   constructor(private scene: Phaser.Scene, public map: StageMap) {
     const s = scene;
@@ -165,6 +166,17 @@ export class Level {
     this.bossWall = this.addSolid(x - 20, 0, 40, this.map.height);
     const fx = this.scene.add.rectangle(x, this.map.height / 2, 30, this.map.height, 0x7a3aa0, 0.35).setDepth(-2);
     this.scene.tweens.add({ targets: fx, alpha: 0.6, yoyo: true, repeat: -1, duration: 600 });
+    this.bossWallFx = fx;
+  }
+
+  /** 보스전 초기화 시 아레나 벽 제거 */
+  openArena() {
+    if (this.bossWall) {
+      this.solids.remove(this.bossWall, true, true);
+      this.bossWall = undefined;
+    }
+    this.bossWallFx?.destroy();
+    this.bossWallFx = undefined;
   }
 }
 

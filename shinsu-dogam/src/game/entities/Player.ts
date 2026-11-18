@@ -317,7 +317,7 @@ export class Player {
     this.flashT = 0.12;
     const dir = Math.sign(this.x - fromX) || -this.facing;
     if (!(this.shieldT > 0 && this.def.id === 'haetae')) {
-      this.body.setVelocity(dir * 380, -360);
+      this.body.setVelocity(dir * 260, -330);
       this.flying = false;
     }
     this.dashT = 0;

@@ -274,6 +274,18 @@ export class WorldScene extends Phaser.Scene {
   /** 기절·낙사 후 마지막 석등에서 다시 시작 */
   revive(full = true) {
     const p = this.player;
+    // 보스전 중 기절하면 아레나 밖 석등에서 다시 시작하므로 전투를 초기화한다 (다시 들어가면 재시작)
+    if (this.boss && !this.boss.dead) {
+      this.boss.destroy();
+      // 보스가 소환한 비행 요괴도 정리
+      for (const m of this.monsters) if (m !== this.boss && !m.dead && m.def.id === 'bat') m.destroy();
+      this.monsters = this.monsters.filter((m) => m !== this.boss && m.def.id !== 'bat');
+      this.boss = undefined;
+      this.bossStarted = false;
+      this.level.openArena();
+      this.events.emit('boss-hp', 0, 1, false);
+      audio.startMusic('calm');
+    }
     p.body.reset(this.respawn.x, this.respawn.y - 60);
     p.flying = false;
     p.diving = null;
@@ -348,7 +360,8 @@ export class WorldScene extends Phaser.Scene {
     }
     // 석등 (체크포인트)
     for (const cp of this.level.checkpoints) {
-      if (!cp.lit && Math.abs(p.x - cp.x) < 40 && Math.abs(p.bottom - cp.y) < 120) {
+      // 석등을 지나치면(공중이어도 적당한 높이면) 불이 켜진다
+      if (!cp.lit && p.x > cp.x - 30 && p.x < cp.x + 400 && p.bottom < cp.y + 30 && p.bottom > cp.y - 320) {
         cp.lit = true;
         cp.sprite.setTexture('lantern_on');
         this.respawn = { x: cp.x, y: cp.y - 20 };
