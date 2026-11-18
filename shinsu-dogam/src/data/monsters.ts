@@ -8,12 +8,12 @@ export const MONSTERS: Record<string, MonsterDef> = {
     drops: [{ item: 'spirit_stone', chance: 0.12, qty: [1, 1] }, { item: 'yakgwa', chance: 0.05, qty: [1, 1] }],
   },
   dokkaebi: {
-    id: 'dokkaebi', name: '산속 도깨비 짐승', desc: '도깨비 뿔이 돋은 곱슬 갈기 짐승. 깡충깡충 뛰어올라 덮친다.',
+    id: 'dokkaebi', name: '도깨비 멧돼지', desc: '도깨비 기운이 서린 날쌘 멧돼지. 깡충 뛰어올라 덮친다.',
     ai: 'hopper', hp: 42, atk: 12, def: 1, exp: 16, gold: [4, 8], speed: 120, body: { w: 56, h: 54 },
     drops: [{ item: 'spirit_stone', chance: 0.14, qty: [1, 1] }, { item: 'silk_thread', chance: 0.2, qty: [1, 2] }],
   },
   fox: {
-    id: 'fox', name: '어둠의 이리 정령', desc: '어둠에 물든 이리 정령. 꼬리의 붉은 불꽃을 구슬로 뭉쳐 멀리서 던진다.',
+    id: 'fox', name: '요기 서린 멧돼지', desc: '요기를 머금고 떠다니는 멧돼지. 거리를 두고 어둠 구슬을 내뿜는다.',
     ai: 'caster', hp: 36, atk: 13, def: 1, exp: 20, gold: [5, 9], speed: 110, body: { w: 60, h: 46 },
     drops: [{ item: 'spirit_stone', chance: 0.16, qty: [1, 1] }, { item: 'moon_petal', chance: 0.25, qty: [1, 2] }],
   },
@@ -23,7 +23,7 @@ export const MONSTERS: Record<string, MonsterDef> = {
     drops: [{ item: 'spirit_stone', chance: 0.1, qty: [1, 1] }],
   },
   rock: {
-    id: 'rock', name: '바위 정령', desc: '이끼 낀 바위 거북에 깃든 정령. 몸의 균열이 붉게 달아올라 있다. 느리지만 단단하고, 내려찍기로 충격파를 일으킨다.',
+    id: 'rock', name: '우두머리 멧돼지', desc: '무리를 이끄는 거대한 멧돼지. 느리지만 단단하고, 앞발로 땅을 내려찍어 충격파를 일으킨다.',
     ai: 'golem', hp: 160, atk: 18, def: 6, exp: 60, gold: [15, 25], speed: 55, body: { w: 84, h: 92 }, elite: true, knockbackImmune: true,
     drops: [{ item: 'spirit_stone', chance: 1, qty: [2, 3] }, { item: 'silk_thread', chance: 0.6, qty: [1, 3] }],
   },

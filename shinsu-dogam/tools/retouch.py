@@ -112,3 +112,25 @@ def apply(rgba: np.ndarray, cfg) -> np.ndarray:
     if cfg.get('mouth'):
         rgba = close_mouth(rgba, cfg['mouth'])
     return rgba
+
+
+def whiten(rgba: np.ndarray, polys, fur=(248, 242, 231), ink=(128, 78, 42)) -> np.ndarray:
+    """다각형 안의 빈 곳(투명한 틈)을 흰 털로 채운다. 원래 그림(선·무늬)은 그 위에 그대로 남긴다.
+    채운 영역이 바깥 투명과 맞닿는 곳에는 원화 같은 갈색 외곽선 1px."""
+    from scipy import ndimage
+    h, w = rgba.shape[:2]
+    a = rgba[..., 3:4].astype(np.float32) / 255.0
+    pm = np.concatenate([rgba[..., :3].astype(np.float32) / 255.0 * a, a], axis=2)
+    m = _mask(w, h, polys, blur=0.5)[..., None]
+    under = np.concatenate([np.broadcast_to(np.array(fur, np.float32) / 255, (h, w, 3)) * m, m], axis=2)
+    out = pm + under * (1 - pm[..., 3:4])
+    # 바깥 테두리 먹선
+    inside = m[..., 0] > 0.5
+    ring = ndimage.binary_dilation(inside, iterations=1) & ~inside & (rgba[..., 3] < 80)
+    ring &= ndimage.binary_dilation(inside & (rgba[..., 3] < 200), iterations=1)
+    col = np.array(ink, np.float32) / 255
+    k = ring[..., None] * 0.85
+    out = np.concatenate([col * k, k], axis=2) + out * (1 - k)
+    alpha = np.clip(out[..., 3:4], 0, 1)
+    rgb = np.where(alpha > 1e-3, out[..., :3] / np.maximum(alpha, 1e-3), 0)
+    return (np.concatenate([np.clip(rgb, 0, 1), alpha], axis=2) * 255 + 0.5).astype(np.uint8)

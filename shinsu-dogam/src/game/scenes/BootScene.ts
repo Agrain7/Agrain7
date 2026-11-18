@@ -22,8 +22,11 @@ export class BootScene extends Phaser.Scene {
     this.load.on('progress', (p: number) => this.drawBar(p * 0.4));
     for (const key of Object.keys(MOUNT_ART)) this.load.image(`img_${key}`, `assets/mounts/${key}.png`);
     for (const [id, art] of Object.entries(MONSTER_ART)) this.load.image(monsterImageKey(id), art.file);
-    for (const sky of ['dusk', 'night', 'mist']) this.load.image(`ref_${sky}_cliffs`, `assets/backgrounds/${sky}_cliffs.png`);
+    for (const sky of ['dusk', 'mist']) this.load.image(`ref_${sky}_cliffs`, `assets/backgrounds/${sky}_cliffs.png`);
     this.load.image('ref_portrait', 'assets/ui/portrait_haram.png');
+    // 참고 화면에서 잘라 낸 배경 조각 (tools/extract_scenery.py)
+    for (const sky of ['dusk', 'mist']) for (const n of ['sky', 'clouds', 'forest']) this.load.image(`scn_${sky}_${n}`, `assets/scenery/${sky}_${n}.png`);
+    for (const n of ['moon', 'bridge_top', 'pavilion', 'banner_red', 'banner_pink']) this.load.image(`scn_${n}`, `assets/scenery/${n}.png`);
   }
 
   private drawBar(p: number) {

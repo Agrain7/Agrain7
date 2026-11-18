@@ -123,8 +123,8 @@ try {
   await world(page, (w) => { w.player.ult = 100; return 1; });
   await page.keyboard.press('u');
   await sleep(2600);
-  const ult = await world(page, (w) => ({ ult: Math.round(w.player.ult), freeze: w.freezeT <= 0 }));
-  check('필살기 발동 (게이지 소모)', ult.ult < 30 && ult.freeze, JSON.stringify(ult));
+  const ult = await world(page, (w) => ({ ult: Math.round(w.player.ult), freeze: w.freezeT <= 0, noCutin: !w.scene.get('Hud').children.list.some((o) => o.type === 'Text' && /월광참|깃털폭풍|뇌우|염화강림|금강포효|대해일|서광|심판화|천상광/.test(o.text ?? '')) }));
+  check('필살기 발동 (게이지 소모, 글자·화면 멈춤 없음)', ult.ult < 30 && ult.freeze && ult.noCutin, JSON.stringify(ult));
   await page.screenshot({ path: `${OUT}/06b_ultimate.png` });
   await sleep(1500);
   // 진화 + 청룡 비행 (데이터 조작으로 빠르게 확인)
@@ -151,12 +151,12 @@ try {
   await page.keyboard.up('Space');
   check('청룡 각성체 자유 비행', fly.flying && y0 - fly.y > 200, JSON.stringify({ ...fly, rise: Math.round(y0 - fly.y) }));
   // 현무 이단 점프 (사용자 제보 버그)
-  await world(page, (w, s) => { s.obtainMount('hyeonmu'); return 1; });
-  await sleep(900); // 획득 연출이 뜰 때까지
-  for (let i = 0; i < 4; i++) {
-    if ((await activeScenes(page)).includes('World')) break; // 획득 연출 중에는 월드가 멈춰 있다
-    await page.mouse.click(510, 610);
-    await sleep(700);
+  // 획득 연출(대기열)이 끼어들지 않도록 저장 데이터에 바로 넣고, 월드가 움직이는 상태에서 시험
+  await world(page, (w, s) => { const now = Date.now(); s.data.mounts.hyeonmu ??= { id: 'hyeonmu', level: 1, exp: 0, stage: 0, obtainedAt: now, history: [{ stage: 0, at: now, level: 1 }] }; return 1; });
+  for (let i = 0; i < 6; i++) {
+    if ((await activeScenes(page)).includes('World')) break;
+    await page.mouse.click(640, 640);
+    await sleep(800);
   }
   await world(page, (w, s) => { s.data.activeMount = 'hyeonmu'; w.player.rebuild(); w.player.body.reset(500, 800); return 1; });
   await sleep(700);

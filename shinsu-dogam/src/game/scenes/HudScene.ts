@@ -10,8 +10,7 @@ import { RANGED } from '../../data/beastSkills.ts';
 import type { MountId } from '../../data/types.ts';
 import { expToNext } from '../../systems/state.ts';
 import { GAME_W, GAME_H, COLORS, isTouchDevice } from '../config.ts';
-import { addCanvas, ensurePortrait, riderMeta } from '../textures.ts';
-import { MOUNT_ART, artKey } from '../../data/mountArt.ts';
+import { addCanvas, riderMeta } from '../textures.ts';
 import { makeCanvas, cloudSwirl } from '../../art/paint.ts';
 import { audio } from '../../systems/audio.ts';
 
@@ -36,10 +35,8 @@ export class HudScene extends Phaser.Scene {
   private msgs: Phaser.GameObjects.Text[] = [];
   private ultRing!: Phaser.GameObjects.Graphics;
   private ultGlow!: Phaser.GameObjects.Image;
-  private ultReadyShown = false;
   private progress!: Phaser.GameObjects.Graphics;
   private progressIcon!: Phaser.GameObjects.Image;
-  private rangedText!: Phaser.GameObjects.Text;
   private showBtns = true;
   private lastOutfit = '';
 
@@ -51,7 +48,6 @@ export class HudScene extends Phaser.Scene {
     this.world = this.scene.get('World') as WorldScene;
     this.btns = [];
     this.msgs = [];
-    this.ultReadyShown = false;
     this.ensureOrnaments();
     // ---- 좌상단: 초상 + 레벨 + 체력·경험치 ----
     this.add.image(250, 66, 'hud_plate').setOrigin(0.5);
@@ -125,24 +121,19 @@ export class HudScene extends Phaser.Scene {
     this.btnLayer.addAt(this.ultGlow, 0);
     this.ultRing = this.add.graphics();
     this.btnLayer.add(this.ultRing);
-    this.rangedText = txt(this, GAME_W - 478, GAME_H - 150, '', 12, '#bfe9ff', { stroke: '#1d1a2b', strokeThickness: 3 }).setOrigin(0.5);
-    this.btnLayer.add(this.rangedText);
     this.legend = txt(this, GAME_W / 2, GAME_H - 16, 'A·D 이동 · Space 점프(길게: 활공·비행) · J 공격(누르고 있으면 연속, 멀면 원거리) · K 기술 · U 필살기 · L 돌진 · Q 교체 · Esc 메뉴', 13, '#f6ead0', { stroke: '#1d1a2b', strokeThickness: 3 }).setOrigin(0.5).setAlpha(0.85);
     this.applyButtonMode();
     // ---- 월드 이벤트 ----
     const onMsg = (m: string, c: string) => this.message(m, c);
     const onTitle = (t: string, s: string) => this.titleCard(t, s);
     const onBoss = (hp: number, max: number, show: boolean) => { this.bossLayer.setVisible(show); this.bossBar.set(hp / max); };
-    const onCut = (id: MountId, stage: number, name: string, hanja: string, ink: string, color: number) => this.cutIn(id, stage, name, hanja, ink, color);
     this.world.events.on('hud-msg', onMsg);
     this.world.events.on('hud-title', onTitle);
     this.world.events.on('boss-hp', onBoss);
-    this.world.events.on('ult-cutin', onCut);
     this.events.once('shutdown', () => {
       this.world.events.off('hud-msg', onMsg);
       this.world.events.off('hud-title', onTitle);
       this.world.events.off('boss-hp', onBoss);
-      this.world.events.off('ult-cutin', onCut);
     });
     this.events.on('resume', () => { this.applyButtonMode(); this.refreshFace(); });
   }
@@ -253,33 +244,6 @@ export class HudScene extends Phaser.Scene {
   }
 
   /** 필살기 컷인: 먹 띠 + 영물 원화 + 기술 이름 */
-  private cutIn(id: MountId, stage: number, name: string, hanja: string, ink: string, color: number) {
-    const c = this.add.container(0, 0).setDepth(500);
-    const dim = this.add.rectangle(0, 0, GAME_W, GAME_H, 0x000000, 0.35).setOrigin(0);
-    const band = this.add.graphics();
-    band.fillStyle(Phaser.Display.Color.HexStringToColor(ink).color, 0.92);
-    band.beginPath();
-    band.moveTo(-40, GAME_H / 2 - 120); band.lineTo(GAME_W + 40, GAME_H / 2 - 160); band.lineTo(GAME_W + 40, GAME_H / 2 + 90); band.lineTo(-40, GAME_H / 2 + 130);
-    band.closePath(); band.fillPath();
-    band.lineStyle(4, 0xe2b14c, 1);
-    band.lineBetween(-40, GAME_H / 2 - 120, GAME_W + 40, GAME_H / 2 - 160);
-    band.lineBetween(-40, GAME_H / 2 + 130, GAME_W + 40, GAME_H / 2 + 90);
-    const glow = this.add.image(380, GAME_H / 2, 'wisp_gold').setScale(24).setTint(color).setAlpha(0.6).setBlendMode(Phaser.BlendModes.ADD);
-    const key = ensurePortrait(this, id, stage, 'normal', store.state.data.mounts[id]?.skin);
-    const info = MOUNT_ART[artKey(id, stage)];
-    const por = this.add.image(-260, GAME_H / 2 + 120, key).setOrigin(0.5, 1).setScale(Math.min(2.4, 380 / info.w, 300 / info.h));
-    const title = txt(this, GAME_W + 300, GAME_H / 2 - 30, name, 64, '#fff6e0', { title: true, stroke: '#1d1a2b', strokeThickness: 10 }).setOrigin(0.5);
-    const sub = txt(this, GAME_W + 300, GAME_H / 2 + 40, hanja, 30, '#e2b14c', { title: true, stroke: '#1d1a2b', strokeThickness: 6 }).setOrigin(0.5);
-    c.add([dim, band, glow, por, title, sub]);
-    band.setScale(1, 0.05).setY(GAME_H / 2 * 0.95);
-    this.tweens.add({ targets: band, scaleY: 1, y: 0, duration: 140, ease: 'Cubic.out' });
-    this.tweens.add({ targets: por, x: 360, duration: 260, ease: 'Back.out' });
-    this.tweens.add({ targets: [title, sub], x: 880, duration: 260, delay: 60, ease: 'Back.out' });
-    this.cameras.main.flash(160, 255, 255, 255);
-    audio.play('boss');
-    this.tweens.add({ targets: c, alpha: 0, delay: 760, duration: 180, onComplete: () => c.destroy() });
-  }
-
   update() {
     const p = this.world.player;
     if (!p) return;
@@ -334,11 +298,6 @@ export class HudScene extends Phaser.Scene {
       r.arc(lotus.img.x, lotus.img.y, lotus.r + 6, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * (p.ult / 100), false);
       r.strokePath();
       this.ultGlow.setAlpha(p.ult >= 100 ? 0.5 + Math.sin(this.time.now / 160) * 0.25 : 0);
-      this.rangedText.setText(RANGED[p.def.id as MountId].name);
     }
-    if (p.ult >= 100 && !this.ultReadyShown) {
-      this.ultReadyShown = true;
-      this.message('필살기 준비 완료! (U / 연꽃 버튼)', '#ffe08a');
-    } else if (p.ult < 100) this.ultReadyShown = false;
   }
 }

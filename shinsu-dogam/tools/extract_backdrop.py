@@ -112,7 +112,7 @@ def main():
     os.makedirs(ui, exist_ok=True)
     portrait(ref).save(os.path.join(ui, 'portrait_haram.png'), optimize=True)
     base = build(ref)
-    for kind in ('dusk', 'night', 'mist'):
+    for kind in ('dusk', 'mist'):  # 모든 구간을 밝게 (밤 판은 쓰지 않음)
         arr = base if kind == 'dusk' else grade(base, kind)
         im = Image.fromarray(np.clip(arr, 0, 255).astype(np.uint8), 'RGBA')
         im.save(os.path.join(OUT, f'{kind}_cliffs.png'), optimize=True)

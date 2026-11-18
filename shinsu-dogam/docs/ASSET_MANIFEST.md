@@ -46,17 +46,26 @@
 | 파일 | 내용 | 크기(px) | 처리 |
 |---|---|---|---|
 | `assets/monsters/boar.png` | 붉은 눈의 산돼지 (참고 화면 가운데 몬스터) | 250×167 | 참고 이미지 (1030, 558, 1172, 656) → 4배 확대 후 하늘·폭포·이끼 땅 색 분류로 배경 제거, 2배 크기로 저장, 좌우 반전 (`tools/extract_boar.py`) |
-| `assets/monsters/fox.png` | 어둠의 이리 정령 | 124×110 | 늑대 성장체 원화 → 먹빛 몸·크림 갈기·붉은 불꽃·소용돌이 무늬로 색 변환 (`tools/make_monsters.py`) |
-| `assets/monsters/bat.png` | 먹구름 까마귀 요괴 | 112×113 | 매 성장체 원화 → 색 변환 |
-| `assets/monsters/dokkaebi.png` | 산속 도깨비 짐승 | 122×112 | 해태 유체 원화 → 색 변환 |
-| `assets/monsters/rock.png` | 바위 정령 | 176×153 | 현무 성장체 원화 → 이끼 낀 돌·붉은 균열로 색 변환 |
+| `assets/monsters/boar_b.png` | 도깨비 멧돼지 (참고 화면 왼쪽 산돼지, 덮치는 자세) | 254×165 | 참고 이미지 (884, 562, 1024, 652) → 같은 방식 (`tools/extract_boar.py`) |
+| `assets/monsters/boar_c.png` | 요기 서린 멧돼지 (참고 화면 오른쪽 산돼지, 꼬리 고리) | 240×156 | 참고 이미지 (1188, 566, 1314, 652) → 같은 방식 |
+| (우두머리 멧돼지) | `boar.png` 를 크게 (화면 높이 138px) | — | — |
+| `assets/monsters/bat.png` | 먹구름 까마귀 요괴 (참고 화면에 나는 몬스터가 없어 도감 원화 사용) | 112×113 | 매 성장체 원화 → 먹빛 몸·크림 깃·붉은 무늬로 색 변환 (`tools/make_monsters.py`) |
 | `assets/monsters/boss.png` | 흑운 산군 | 304×176 | 백호 각성체(입 다문 보정본) → 검은 범으로 색 변환 |
 | `assets/backgrounds/dusk_cliffs.png` | 절벽 위 궁궐·폭포 원경 (황혼) | 2016×386 | 참고 이미지 (1000, 362, 1480, 546), 표지판 자리는 왼쪽 하늘로 메움, 2.1배 확대, 좌우 반전본 이어 붙여 가로 반복, 푸른 하늘은 투명 처리 (`tools/extract_backdrop.py`) |
-| `assets/backgrounds/night_cliffs.png`, `mist_cliffs.png` | 같은 원경의 밤·안개 판 | 2016×386 | 위 그림 색 보정 |
+| `assets/backgrounds/mist_cliffs.png` | 같은 원경의 안개 판 | 2016×386 | 위 그림 색 보정 (밤 판은 모든 구간을 밝게 바꾸며 삭제) |
 | `assets/ui/portrait_haram.png` | HUD 초상 (기본 의상) | 168×168 | 참고 이미지 왼쪽 위 금테 안 소녀 얼굴 (중심 89, 413, 반지름 33) |
+
+| `assets/scenery/<dusk\|mist>_sky.png` | 하늘 | 1280×720 | 참고 하늘색 그라데이션 + 큼직한 붓결 얼룩 (`tools/extract_scenery.py`) |
+| `assets/scenery/moon.png` | 달 | 420×420 | 참고 화면 달 윗부분의 결로 원판 복원 |
+| `assets/scenery/<dusk\|mist>_clouds.png` | 크림색 소용돌이 구름 띠 | 2048×260 | 참고 화면 구름 2개 (640~906, 398~446 / 902~1016, 478~510) 잘라 배치 |
+| `assets/scenery/<dusk\|mist>_forest.png` | 절벽 아래 소나무·벚나무 숲 (근경) | 865×197 | 참고 화면 (796~890, 1318~1430 × 548~642), 안개·하늘은 투명 |
+| `assets/scenery/bridge_top.png` | 돌다리 윗부분 (이끼 낀 판석·큰 돌) | 1240×112 | 참고 화면 (690~1000, 649~705), 좌우 반전 이어 붙임 |
+| `assets/scenery/pavilion.png` | 정자 | 332×292 | 참고 화면 왼쪽 정자 (190~356, 500~646), 기둥 사이 하늘·꽃은 투명 |
+| `assets/scenery/banner_red.png`, `banner_pink.png` | 가지에 매단 현수막 | 52×176, 52×144 | 참고 화면 (356~386 / 398~424, 414~510) |
 
 ### 2-2. 영물 원화 보정 (2026-11-19)
 - 기린 유체·각성체: 얼굴·턱의 흰 털이 종이색과 같아 배경으로 지워지던 문제 → 얼굴 다각형을 그림으로 채우고 원화 같은 갈색 외곽선 1px (`extract_beasts.py` 의 `fill`)
+- 기린 유체·성장체·각성체 (2차): 사용자 재요청("턱 쪽을 아예 하얗게")으로 턱·수염·목 아래의 남은 틈을 흰 털로 채움 — 원래 선·무늬는 위에 그대로 (`retouch.whiten`, 설정은 `WHITEN`)
 - 늑대 각성체, 백호 유체·성장체·각성체: 사용자 요청으로 **입을 다문 모습**으로 보정 — 아래턱을 떼어 입꼬리 기준으로 위로 돌려 붙이고, 입 속은 털 색으로 메운 뒤 먹선으로 입선 (`tools/retouch.py`, 설정은 `extract_beasts.py` 의 `MOUTHS`)
 
 ## 3. 코드로 생성되는 2D 에셋 (실행 시 Canvas 2D로 그림)

@@ -116,7 +116,7 @@
 `game_start, tutorial_complete, stage_start, stage_clear, monster_defeat, mount_unlock, mount_level_up, mount_evolve, codex_entry, shop_view, purchase_start, purchase_success, purchase_refund, session_end` — 현재는 브라우저에만 최근 500건 기록(외부 전송 없음, 개인정보 없음). `src/services/analytics/Analytics.ts` 의 provider 로 수집 서버를 연결한다.
 
 ## 14. 원거리 공격과 필살기 (2026-11-19 추가)
-원본: `src/data/beastSkills.ts`. 필살기 게이지: 근접 적중 +4, 원거리 적중 +2.2, 처치 +7, 피격 +5 (100에서 발동). 발동 시 0.85초 컷인 동안 적과 적 투사체가 멈춘다.
+원본: `src/data/beastSkills.ts`. 필살기 게이지: 근접 적중 +4, 원거리 적중 +2.2, 처치 +7, 피격 +5 (100에서 발동). 발동 시 글자·컷인·화면 멈춤 없이 기운 고리와 짧은 섬광 뒤 곧바로 영물별 효과가 나온다 (2026-11-19 사용자 요청: "글자 안 나오게, 필살기는 효과만, 게임이 멈추는 것 같아서 별로"). 발동 중 2.2초 무적.
 | 영물 | 원거리 공격 | 필살기 |
 |---|---|---|
 | 늑대 | 월광 참격 (관통) | 천랑 월광참 — 질주하며 화면의 적을 다섯 번 베고 거대한 초승달 참격 |

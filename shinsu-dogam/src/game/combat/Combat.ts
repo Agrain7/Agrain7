@@ -21,6 +21,11 @@ interface Proj {
 const FX_TEX: Partial<Record<FxKind, string>> = { feather: 'fx_feather', fire: 'fx_fire', water: 'fx_water', light: 'fx_light' };
 const RING_TEX: Partial<Record<FxKind, string>> = { howl: 'fx_ring_white', shock: 'fx_ring_gold', fire: 'fx_ring_fire', water: 'fx_ring_blue', light: 'fx_ring_gold', spirit: 'fx_ring_blue', heal: 'fx_ring_gold' };
 
+/** 0xRRGGBB → [r, g, b] */
+function hexRgb(c: number): [number, number, number] {
+  return [(c >> 16) & 255, (c >> 8) & 255, c & 255];
+}
+
 export class Combat {
   projs: Proj[] = [];
   private dustEm: Phaser.GameObjects.Particles.ParticleEmitter;
@@ -175,10 +180,11 @@ export class Combat {
     p.ult = 0;
     p.ultT = 2.2;
     p.atkAnimT = 0.3;
-    this.scene.freezeT = 0.85;
-    this.scene.events.emit('ult-cutin', id, p.st.stage, U.name, U.hanja, U.ink, U.color);
+    // 글자·화면 멈춤 없이 효과만 (사용자 요청) — 기운이 모이는 고리 후 바로 발동
+    this.ring(p.x, p.y, 'fx_ring_gold', 1.6, 260);
+    this.scene.cameras.main.flash(120, ...hexRgb(U.color));
     audio.play('evolve');
-    this.scene.time.delayedCall(820, () => this.runUltimate(p, id));
+    this.scene.time.delayedCall(140, () => this.runUltimate(p, id));
   }
 
   private onScreen(pad = 120): Monster[] {

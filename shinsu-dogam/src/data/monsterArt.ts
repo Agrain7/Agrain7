@@ -1,5 +1,5 @@
 // 몬스터 그림(투명 PNG) 정보 — tools/extract_boar.py, tools/make_monsters.py 가 만든다.
-// boar: 참고 게임 화면의 산돼지를 그대로 잘라 냄. 나머지: 도감 원화를 같은 분위기(먹빛 몸·크림 갈기·붉은 소용돌이)로 바꿈.
+// 일반 몬스터: 참고 게임 화면의 산돼지 3마리를 그대로 잘라 냄. 비행 요괴·보스: 도감 원화를 같은 분위기(먹빛 몸·크림 갈기·붉은 소용돌이)로 바꿈.
 import type { RigAnim } from '../art/rig.ts';
 import type { MotionKind } from './mountArt.ts';
 
@@ -32,8 +32,9 @@ export const MONSTER_ART: Record<string, MonsterArt> = {
     frames: { idle: 8, run: 8 },
     anims: quadAnims('run', 20, -1), // 돌진: 빠른 달리기
   },
+  // 참고 화면의 산돼지 3마리로 일반 몬스터를 모두 그린다 (사용자 요청: 몬스터 그림은 보낸 사진대로)
   fox: {
-    file: 'assets/monsters/fox.png', w: 124, h: 110, rig: 'wolf_1', motion: 'quad', displayH: 80,
+    file: 'assets/monsters/boar_c.png', w: 240, h: 156, rig: 'mon_boar_c', motion: 'quad', displayH: 82,
     frames: { idle: 8, run: 8, atk: 4 },
     anims: quadAnims('atk', 10),
   },
@@ -48,12 +49,12 @@ export const MONSTER_ART: Record<string, MonsterArt> = {
     },
   },
   dokkaebi: {
-    file: 'assets/monsters/dokkaebi.png', w: 122, h: 112, rig: 'haetae_0', motion: 'quad', displayH: 84,
+    file: 'assets/monsters/boar_b.png', w: 254, h: 165, rig: 'mon_boar_b', motion: 'quad', displayH: 78,
     frames: { idle: 8, fly: 8, atk: 4 },
     anims: { ...quadAnims('atk', 12), run: { from: 'idle', fps: 12, repeat: -1 } },
   },
   rock: {
-    file: 'assets/monsters/rock.png', w: 176, h: 153, rig: 'hyeonmu_1', motion: 'shell', displayH: 128,
+    file: 'assets/monsters/boar.png', w: 250, h: 167, rig: 'mon_boar', motion: 'quad', displayH: 138,
     frames: { idle: 8, run: 8, atk: 4 },
     anims: quadAnims('atk', 8),
   },

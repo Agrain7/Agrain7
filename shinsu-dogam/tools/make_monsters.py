@@ -2,6 +2,7 @@
 """
 몬스터 그림 만들기 — 참고 화면의 산돼지(먹빛 몸·크림색 갈기·붉은 소용돌이 무늬)와 같은 분위기로,
 영물 도감 원화를 '어둠에 물든 요괴' 색으로 바꾼다. (원화 자체는 사용자 제공, 색만 변환)
+일반 몬스터는 참고 화면의 산돼지 3마리(tools/extract_boar.py)를 쓰고, 여기서는 비행 요괴·보스만 만든다.
 
 사용법:  python3 tools/extract_boar.py && python3 tools/make_monsters.py
 출력:    public/assets/monsters/<id>.png  (오른쪽을 바라봄), monsters.json (크기)
@@ -150,14 +151,8 @@ def glow_eyes(rgba, eyes):
 
 
 MONSTERS = {
-    # 어둠의 이리 (원거리 요괴) ← 늑대 성장체: 흰 털 → 먹빛, 푸른 불꽃 → 붉은 불꽃
-    'fox': {'base': 'wolf_1', 'map': {'neutral': 'char', 'blue': 'crimson', 'cream_region': [(0.5, 0.05), (0.8, 0.0), (0.8, 0.62), (0.5, 0.7)], 'cream_l': (0.78, 0.9)}, 'swirls': [(0.34, 0.52, 0.06), (0.58, 0.5, 0.045)]},
     # 먹구름 까마귀 요괴 (비행) ← 매 성장체
     'bat': {'base': 'hawk_1', 'map': {'neutral': 'char_cream', 'blue': 'crimson'}, 'swirls': [(0.42, 0.42, 0.045)]},
-    # 도깨비 짐승 (깡충) ← 해태 유체: 크림 몸 → 먹빛, 청록 곱슬 갈기 → 크림 갈기
-    'dokkaebi': {'base': 'haetae_0', 'map': {'neutral': 'char', 'blue': 'cream'}, 'swirls': [(0.42, 0.64, 0.06), (0.63, 0.68, 0.045)]},
-    # 바위 정령 ← 현무 성장체: 이끼 낀 돌 + 달아오른 균열
-    'rock': {'base': 'hyeonmu_1', 'map': {'neutral': 'stone', 'blue': 'moss', 'blue_hue': (60, 260), 'gold': 'ember'}, 'swirls': []},
     # 흑운 산군 (보스) ← 백호 각성체: 흰 털 → 먹빛, 남색 줄무늬·푸른 눈·술 → 진홍
     'boss': {'base': 'baekho_2', 'map': {'neutral': 'char', 'blue': 'crimson', 'gold': 'ember', 'cream_region': [(0.56, 0.0), (0.86, 0.0), (0.84, 0.78), (0.6, 0.8)], 'cream_l': (0.8, 0.92)}, 'swirls': [(0.42, 0.58, 0.032)]},
 }

@@ -44,10 +44,12 @@ export class Level {
       this.addSolid(g.x0, g.top, w, h);
       const style = g.style ?? 'grass';
       s.add.tileSprite(g.x0, g.top + 18, w, h, `ground_${style}`).setOrigin(0).setDepth(-10);
+      // 돌다리 윗부분: 참고 화면의 돌다리를 그대로 (이끼 낀 판석·큰 돌)
+      if (style === 'grass' && s.textures.exists('scn_bridge_top')) s.add.tileSprite(g.x0, g.top - 4, w, 112, 'scn_bridge_top').setOrigin(0).setDepth(-9.4);
       s.add.tileSprite(g.x0 - 6, g.top - 22, w + 12, 48, `top_${style}`).setOrigin(0).setDepth(-9);
       // 돌다리 아치 (참고 화면처럼 다리 아래로 먼 풍경이 비침)
       if (style === 'grass' && w > 520) {
-        for (let ax = g.x0 + 170; ax + 270 < g.x1 - 40; ax += 620) { const a = s.add.image(ax, g.top + 44, 'bridge_arch').setOrigin(0).setDepth(-9.7); if (map.sky === 'night') a.setTint(0x7880b4); }
+        for (let ax = g.x0 + 170; ax + 270 < g.x1 - 40; ax += 620) { const a = s.add.image(ax, g.top + 92, 'bridge_arch').setOrigin(0).setDepth(-9.7); if (map.sky === 'night') a.setTint(0x7880b4); }
       }
       // 절벽 가장자리 그림자
       const edge = s.add.graphics().setDepth(-9.5);
@@ -157,12 +159,19 @@ export class Level {
     const s = this.scene;
     const sc = d.s ?? 1;
     switch (d.type) {
-      case 'pavilion': s.add.image(d.x, d.y + 6, 'pavilion').setOrigin(0.5, 1).setScale(sc).setDepth(-12); break;
+      case 'pavilion': {
+        const ref = s.textures.exists('scn_pavilion');
+        s.add.image(d.x, d.y + 6, ref ? 'scn_pavilion' : 'pavilion').setOrigin(0.5, 1).setScale(sc * (ref ? 0.95 : 1)).setDepth(-12);
+        break;
+      }
       case 'lantern': s.add.image(d.x, d.y + 4, 'lantern_on').setOrigin(0.5, 1).setScale(0.9 * sc).setDepth(-12); break;
       case 'tree': {
         s.add.image(d.x, d.y + 8, Math.round(d.x / 100) % 2 ? 'tree_cherry' : 'tree_plum').setOrigin(0.5, 1).setScale(sc).setDepth(-13);
         // 가지에 매단 깃발과 등롱 (바람에 흔들림)
-        const ban = s.add.image(d.x - 78 * sc, d.y - 236 * sc, 'banner').setOrigin(0.5, 0).setScale(0.62 * sc).setDepth(-12.5);
+        const refBan = s.textures.exists('scn_banner_red');
+        const ban = refBan
+          ? s.add.image(d.x - 78 * sc, d.y - 240 * sc, Math.round(d.x / 100) % 2 ? 'scn_banner_red' : 'scn_banner_pink').setOrigin(0.5, 0).setScale(0.85 * sc).setDepth(-12.5)
+          : s.add.image(d.x - 78 * sc, d.y - 236 * sc, 'banner').setOrigin(0.5, 0).setScale(0.62 * sc).setDepth(-12.5);
         s.tweens.add({ targets: ban, angle: { from: -4, to: 4 }, yoyo: true, repeat: -1, duration: 1700 + (d.x % 7) * 90, ease: 'Sine.inOut' });
         const lan = s.add.image(d.x + 64 * sc, d.y - 214 * sc, 'hang_lantern').setOrigin(0.5, 0).setScale(0.62 * sc).setDepth(-12.5);
         s.tweens.add({ targets: lan, angle: { from: 5, to: -5 }, yoyo: true, repeat: -1, duration: 1500 + (d.x % 5) * 110, ease: 'Sine.inOut' });

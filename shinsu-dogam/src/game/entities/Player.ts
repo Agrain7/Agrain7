@@ -303,7 +303,6 @@ export class Player {
     if (c.pressed.special && this.specialCD <= 0) this.scene.combat.special(this);
     if (c.pressed.ult) {
       if (this.ult >= 100) this.scene.combat.ultimate(this);
-      else this.scene.hudMsg(`필살기 게이지 ${Math.floor(this.ult)}% — 적을 공격하면 차오른다`, '#ffd0a0');
     }
     if (c.pressed.down && this.grounded && !this.flying) {
       // 아래 + 점프로 구름 발판 아래로 내려가기는 추후

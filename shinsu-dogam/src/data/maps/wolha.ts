@@ -121,7 +121,7 @@ export const STAGES: StageMap[] = [
     goal: { x: 5150, y: G },
   },
   {
-    id: '1-3', index: 2, name: '월하산맥', subtitle: '벼랑길과 용신 사당', sky: 'night', tier: 1, clearExp: 120,
+    id: '1-3', index: 2, name: '월하산맥', subtitle: '벼랑길과 용신 사당', sky: 'dusk', tier: 1, clearExp: 120,
     intro: '험한 벼랑길 끝에 오래된 용신 사당이 있다고 한다.',
     width: 5800, height: H, spawn: { x: 160, y: G - 40 },
     ground: [
@@ -222,7 +222,7 @@ export const STAGES: StageMap[] = [
     goal: { x: 6050, y: 1180 },
   },
   {
-    id: '1-5', index: 4, name: '월하산맥', subtitle: '바위 정령의 산사', sky: 'night', tier: 3, clearExp: 200,
+    id: '1-5', index: 4, name: '월하산맥', subtitle: '바위 정령의 산사', sky: 'dusk', tier: 3, clearExp: 200,
     intro: '오래된 산사를 바위 정령이 지키고 있다. 숨겨진 보물도 있다던데…',
     width: 6000, height: H, spawn: { x: 160, y: G - 40 },
     ground: [
@@ -269,7 +269,7 @@ export const STAGES: StageMap[] = [
     goal: { x: 5850, y: G },
   },
   {
-    id: '1-6', index: 5, name: '월하산맥', subtitle: '수호 요괴의 제단', sky: 'night', tier: 4, clearExp: 300,
+    id: '1-6', index: 5, name: '월하산맥', subtitle: '수호 요괴의 제단', sky: 'dusk', tier: 4, clearExp: 300,
     intro: '산맥의 수호신이 어둠에 물들었다. 정화하자!',
     width: 2900, height: H, spawn: { x: 160, y: G - 40 },
     ground: [{ x0: 0, x1: 2900, top: G }],

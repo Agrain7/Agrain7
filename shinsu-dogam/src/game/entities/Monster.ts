@@ -27,6 +27,8 @@ export class Monster {
   key: string;
   boss = false;
   artH = 0;
+  /** 떠다니는 요괴 아래 요기 고리 */
+  aura?: Phaser.GameObjects.Image;
 
   constructor(public scene: WorldScene, public def: MonsterDef, x: number, y: number, tier: number) {
     const s = scaleMonster(def, tier);
@@ -45,6 +47,10 @@ export class Monster {
     const box = monsterBox(def.id);
     this.spr = scene.add.sprite(x, y, this.key, def.flying ? 'fly_0' : 'idle_0').setOrigin(box.ox / box.w, box.oy / box.h).setScale(monsterScale(def.id)).setDepth(8);
     this.artH = monsterArtHeight(def.id);
+    if (def.ai === 'caster') {
+      this.aura = scene.add.image(x, y, 'fx_ring_dark').setDepth(7.9).setScale(0.55, 0.18).setAlpha(0.75).setBlendMode(Phaser.BlendModes.ADD);
+      scene.tweens.add({ targets: this.aura, alpha: { from: 0.45, to: 0.85 }, yoyo: true, repeat: -1, duration: 700 });
+    }
     this.hpBar = scene.add.graphics().setDepth(9);
     this.play(def.flying ? 'fly' : 'idle');
     this.cd = 0.5 + Math.random();
@@ -75,6 +81,7 @@ export class Monster {
     if (this.dead) return;
     this.dead = true;
     this.hpBar.destroy();
+    this.aura?.destroy();
     this.body.enable = false;
     this.scene.onMonsterDefeated(this);
     this.scene.tweens.add({
@@ -123,6 +130,7 @@ export class Monster {
     // 그리기
     this.spr.setPosition(b.center.x, b.bottom + (this.def.ai === 'caster' ? 0 : 2));
     if (this.def.flying || this.def.ai === 'caster') this.spr.y = b.bottom + 4;
+    this.aura?.setPosition(b.center.x, b.bottom + 10);
     this.spr.setFlipX(this.facing < 0);
     if (this.flashT > 0) this.spr.setTint(0xffffff).setTintMode(Phaser.TintModes.FILL);
     else this.spr.clearTint().setTintMode(Phaser.TintModes.MULTIPLY);
@@ -271,6 +279,7 @@ export class Monster {
   }
 
   destroy() {
+    this.aura?.destroy();
     this.spr.destroy();
     this.zone.destroy();
     this.hpBar.destroy();

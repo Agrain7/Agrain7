@@ -504,8 +504,9 @@ export function paintLantern(lit: boolean): HTMLCanvasElement {
 }
 
 export function paintTreeDecor(kind: 'cherry' | 'plum', seed: number): HTMLCanvasElement {
-  const [c, ctx] = makeCanvas(360, 340);
-  drawBlossomTree(ctx, 180, 335, 1.25, kind, 0, seed);
+  // 꽃 구름이 가장자리에서 잘리지 않도록 넉넉한 캔버스
+  const [c, ctx] = makeCanvas(560, 400);
+  drawBlossomTree(ctx, 280, 395, 1.25, kind, 0, seed);
   return c;
 }
 
@@ -620,10 +621,10 @@ function roughStone(ctx: Ctx, x: number, y: number, w: number, h: number, base: 
 function paintMasonry(size: number): HTMLCanvasElement {
   const [c, ctx] = makeCanvas(size, size);
   const r = rng(21);
-  ctx.fillStyle = '#3f3934';
+  ctx.fillStyle = '#2f2a33';
   ctx.fillRect(0, 0, size, size);
   const rows = [46, 40, 50, 38, 44, 38];
-  const tones = ['#a49b8c', '#968d7f', '#b1a897', '#8c8477', '#a0988d', '#9b9283'];
+  const tones = ['#6e6880', '#625d72', '#7a7389', '#5b566c', '#6b657b', '#665f74'];
   let y = 0;
   for (let ri = 0; ri < rows.length; ri++) {
     const rh = rows[ri];
@@ -741,16 +742,6 @@ export function paintGroundTop(style: 'grass' | 'stone' | 'cave', w = 256, h = 4
     // 돌다리 윗면: 크기가 제각각인 판석 + 노란빛 이끼·풀 (참고 화면처럼)
     const [c, ctx] = makeCanvas(w, h);
     const r = rng(33);
-    ctx.fillStyle = '#5d564d';
-    ctx.fillRect(0, 20, w, 16);
-    let x = 0;
-    while (x < w) {
-      let sw = 44 + Math.floor(r() * 46);
-      if (w - (x + sw) < 36) sw = w - x;
-      const base = ['#b7ae9d', '#aaa190', '#c0b7a5', '#a39a89'][Math.floor(r() * 4)];
-      roughStone(ctx, x + 1, 18, sw - 2, 18, base, r);
-      x += sw;
-    }
     // 이끼 낀 가장자리
     for (let i = 0; i < 26; i++) {
       const xx = r() * w;
@@ -761,8 +752,6 @@ export function paintGroundTop(style: 'grass' | 'stone' | 'cave', w = 256, h = 4
       for (const dx of [0, -w, w]) tuft(ctx, [[xx + dx, 20], [xx + dx + (r() - 0.5) * 4, 20 - hh * 0.6], [xx + dx + (r() - 0.5) * 8, 20 - hh]], 2.6, ['#7f9a3f', '#a8b84e', '#c9c35c', '#6d8a3a'][Math.floor(r() * 4)]);
     }
     for (let i = 0; i < 9; i++) circle(ctx, r() * w, 8 + r() * 10, 2, ['#f6e27a', '#f5b3c6', '#ffffff'][Math.floor(r() * 3)]);
-    // 아래로 늘어진 이끼
-    for (let i = 0; i < 12; i++) ellipse(ctx, r() * w, 37 + r() * 4, 6 + r() * 10, 2.5 + r() * 3, 0, rgba('#6f7f3a', 0.7));
     return c;
   }
   const [c, ctx] = makeCanvas(w, h);

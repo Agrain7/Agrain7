@@ -9,6 +9,9 @@ interface Layer { obj: Phaser.GameObjects.TileSprite; fx: number; fy: number; ba
 const FALLS = [470, 1250];
 /** 참고 파노라마 아래쪽이 놓일 화면 y (근경 숲과 겹쳐 흐려진다) */
 const REF_BOTTOM = 486;
+/** 근경 숲 아래쪽 화면 y (지면 뒤로 살짝 숨김) · 확대 배율 */
+const FOREST_BOTTOM = 540;
+const FOREST_SCALE = 1.25;
 
 export class Backdrop {
   layers: Layer[] = [];
@@ -29,17 +32,22 @@ export class Backdrop {
     const refKey = `ref_${sky}_cliffs`;
     const useRef = !bgOverrides.has(k('cliffs')) && scene.textures.exists(refKey);
     this.hideFalls = bgOverrides.has(k('cliffs')) || useRef;
-    scene.add.image(0, 0, k('sky')).setOrigin(0).setScrollFactor(0).setDepth(-100).setDisplaySize(GAME_W, GAME_H);
-    this.moon = scene.add.image(900, 170, k('moon')).setScrollFactor(0).setDepth(-99).setScale(sky === 'mist' ? 0.6 : 0.85).setAlpha(sky === 'mist' ? 0.7 : 1);
+    // 하늘·달·구름: 참고 화면 조각이 있으면 그것을 (밝은 동양풍 2D)
+    const scn = (n: string) => (scene.textures.exists(`scn_${sky}_${n}`) ? `scn_${sky}_${n}` : null);
+    scene.add.image(0, 0, scn('sky') ?? k('sky')).setOrigin(0).setScrollFactor(0).setDepth(-100).setDisplaySize(GAME_W, GAME_H);
+    const moonKey = useRef && scene.textures.exists('scn_moon') ? 'scn_moon' : k('moon');
+    this.moon = scene.add.image(900, 170, moonKey).setScrollFactor(0).setDepth(-99).setScale(sky === 'mist' ? 0.6 : 0.85).setAlpha(sky === 'mist' ? 0.7 : 1);
     const add = (key: string, y: number, h: number, fx: number, fy: number, depth: number, drift = 0) => {
       const obj = scene.add.tileSprite(0, y, GAME_W, h, key).setOrigin(0).setScrollFactor(0).setDepth(depth);
       const L = { obj, fx, fy, baseY: y, drift };
       this.layers.push(L);
       return L;
     };
-    add(k('clouds'), 30, 260, 0.04, 0.02, -98, 6);
-    add(k('mount0'), 120, 460, 0.08, 0.05, -97);
-    add(k('mount1'), 190, 460, 0.16, 0.1, -96);
+    add(scn('clouds') ?? k('clouds'), 30, 260, 0.04, 0.02, -98, 6);
+    if (!useRef) {
+      add(k('mount0'), 120, 460, 0.08, 0.05, -97);
+      add(k('mount1'), 190, 460, 0.16, 0.1, -96);
+    }
     if (useRef) {
       const th = (scene.textures.get(refKey).getSourceImage() as HTMLImageElement).height;
       this.cliffs = add(refKey, REF_BOTTOM - th, th, 0.24, 0.16, -95);
@@ -48,7 +56,13 @@ export class Backdrop {
       const f = scene.add.tileSprite(0, 0, 96, 520, 'waterfall').setOrigin(0.5, 0).setScrollFactor(0).setDepth(-94.5).setAlpha(0.9);
       this.falls.push(f);
     }
-    add(k('grove'), 330, 440, 0.6, 0.4, -93);
+    // 근경 숲: 참고 화면 절벽 아래 소나무·벚나무 (없으면 코드 그림)
+    const forest = useRef ? scn('forest') : null;
+    if (forest) {
+      const fh = (scene.textures.get(forest).getSourceImage() as HTMLImageElement).height;
+      const L = add(forest, FOREST_BOTTOM - fh * FOREST_SCALE, fh * FOREST_SCALE, 0.5, 0.35, -93);
+      L.obj.setTileScale(FOREST_SCALE, FOREST_SCALE);
+    } else add(k('grove'), 330, 440, 0.6, 0.4, -93);
   }
 
   update(camX: number, camY: number, dt: number) {
