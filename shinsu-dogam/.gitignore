@@ -7,3 +7,4 @@ test-results
 .dev.vars
 *.log
 dist-artifact
+art-ref

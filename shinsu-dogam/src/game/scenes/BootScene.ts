@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
 import { MOUNT_ART } from '../../data/mountArt.ts';
 import { loadFonts } from '../fonts.ts';
-import { addCanvas, ensureRider, ensureSky, generateCommon } from '../textures.ts';
+import { addCanvas, ensureRider, ensureSky, generateCommon, loadSpriteOverrides } from '../textures.ts';
 import { store } from '../ctx.ts';
 import { GAME_W, GAME_H, AUTOTEST, DEBUG, START_STAGE } from '../config.ts';
 
@@ -37,6 +37,8 @@ export class BootScene extends Phaser.Scene {
 
   private async boot() {
     await loadFonts();
+    // 받은 그림(프레임·배경)이 있으면 먼저 불러온다
+    await loadSpriteOverrides(this);
     this.label.setText('영물의 기운을 모으는 중…');
     const jobs = generateCommon(this);
     let i = 0;

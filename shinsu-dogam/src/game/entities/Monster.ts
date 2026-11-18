@@ -3,7 +3,7 @@ import Phaser from 'phaser';
 import type { WorldScene } from '../scenes/WorldScene.ts';
 import type { MonsterDef } from '../../data/types.ts';
 import { scaleMonster } from '../../data/monsters.ts';
-import { ensureMonster, monsterBox } from '../textures.ts';
+import { ensureMonster, monsterBox, monsterScale } from '../textures.ts';
 import { GRAVITY, MAX_FALL } from '../config.ts';
 
 export class Monster {
@@ -42,7 +42,7 @@ export class Monster {
     this.body.setGravityY(def.flying ? 0 : GRAVITY);
     this.body.setMaxVelocity(1600, MAX_FALL);
     const box = monsterBox(def.id);
-    this.spr = scene.add.sprite(x, y, this.key, def.flying ? 'fly_0' : 'idle_0').setOrigin(box.ox / box.w, box.oy / box.h).setDepth(8);
+    this.spr = scene.add.sprite(x, y, this.key, def.flying ? 'fly_0' : 'idle_0').setOrigin(box.ox / box.w, box.oy / box.h).setScale(monsterScale(def.id)).setDepth(8);
     this.hpBar = scene.add.graphics().setDepth(9);
     this.play(def.flying ? 'fly' : 'idle');
     this.cd = 0.5 + Math.random();

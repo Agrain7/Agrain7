@@ -53,6 +53,7 @@ npm run dev      # 게임 서버 실행
 | `npm test` | 게임 로직 단위 테스트 (19개) |
 | `npm run test:e2e` | 실제 브라우저로 플레이 흐름 자동 검사 (빌드 후 실행, 결과 스크린샷 `test-results/`) |
 | `npm run typecheck` | 타입 검사 |
+| `python3 tools/pack_sprites.py` | 받은 그림(`art-in/`) 검사·변환 → 게임에 자동 적용 ([ART_REQUEST](docs/ART_REQUEST.md)) |
 | `npm run build:artifact` | Claude 아티팩트(웹 페이지) 게시용 한 장짜리 페이지 생성 → `dist-artifact/` (Phaser는 CDN, 글꼴은 Google Fonts) |
 
 개발용 주소 옵션: `?debug` (숫자키 1~5 치트), `?debug&stage=1-4` (해당 구간 바로 시작)
@@ -101,4 +102,5 @@ shinsu-dogam/
 - [PROJECT_PLAN](docs/PROJECT_PLAN.md) · [GAME_DESIGN_DOCUMENT](docs/GAME_DESIGN_DOCUMENT.md) · [ART_GUIDE](docs/ART_GUIDE.md)
 - [ECONOMY_DESIGN](docs/ECONOMY_DESIGN.md) · [LEGAL_AND_RELEASE_RESEARCH](docs/LEGAL_AND_RELEASE_RESEARCH.md)
 - [ASSET_PLAN](docs/ASSET_PLAN.md) · [ASSET_MANIFEST](docs/ASSET_MANIFEST.md) · [ASSET_LICENSES](docs/ASSET_LICENSES.md) · [FIREFLY_PROMPTS](docs/FIREFLY_PROMPTS.md)
+- **[ART_REQUEST — 판매 전 필요한 그림·준비물](docs/ART_REQUEST.md)**
 - [DEVELOPMENT_LOG](docs/DEVELOPMENT_LOG.md) · [TEST_REPORT](docs/TEST_REPORT.md) · [RELEASE_CHECKLIST](docs/RELEASE_CHECKLIST.md) · [DEPLOYMENT](docs/DEPLOYMENT.md)

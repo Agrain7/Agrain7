@@ -10,7 +10,7 @@ import { RANGED } from '../../data/beastSkills.ts';
 import type { MountId } from '../../data/types.ts';
 import { expToNext } from '../../systems/state.ts';
 import { GAME_W, GAME_H, COLORS, isTouchDevice } from '../config.ts';
-import { addCanvas, ensurePortrait } from '../textures.ts';
+import { addCanvas, ensurePortrait, riderMeta } from '../textures.ts';
 import { MOUNT_ART, artKey } from '../../data/mountArt.ts';
 import { makeCanvas, cloudSwirl } from '../../art/paint.ts';
 import { audio } from '../../systems/audio.ts';
@@ -216,7 +216,8 @@ export class HudScene extends Phaser.Scene {
     ctx.fillStyle = bg;
     ctx.fillRect(0, 0, 84, 84);
     const img = src.getSourceImage() as HTMLCanvasElement;
-    ctx.drawImage(img, fr.cutX + 56 - 32, fr.cutY + 46 - 30, 64, 64, 0, 4, 84, 84);
+    const [fx, fy, fr2] = riderMeta(`rider_${outfit}`).face;
+    ctx.drawImage(img, fr.cutX + fx - fr2, fr.cutY + fy - fr2 + 2, fr2 * 2, fr2 * 2, 0, 4, 84, 84);
     addCanvas(this, key, c);
     return key;
   }

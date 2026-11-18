@@ -5,7 +5,7 @@ import { MOUNTS, SKILLS } from '../../data/mounts.ts';
 import type { MountDef, MovementProfile, StageDef, SkillDef } from '../../data/types.ts';
 import { MOUNT_ART, artKey, type MountArtInfo } from '../../data/mountArt.ts';
 import { COSMETICS } from '../../data/cosmetics.ts';
-import { ensureMount, ensureRider, type MountTex } from '../textures.ts';
+import { ensureMount, ensureRider, riderMeta, type MountTex } from '../textures.ts';
 import { controls } from '../controls.ts';
 import { store } from '../ctx.ts';
 import { GRAVITY, MAX_FALL } from '../config.ts';
@@ -119,12 +119,13 @@ export class Player {
     this.vis.removeAll(true);
     const info = this.info;
     this.mountSpr = this.scene.add.sprite(0, 0, this.mt.key, 'idle_0')
-      .setOrigin(0.5, (this.mt.padTop + info.h) / this.mt.fh)
-      .setScale(info.scale);
+      .setOrigin(this.mt.originX, this.mt.originY)
+      .setScale(this.mt.scale);
     this.riderKey = ensureRider(this.scene, store.state.data.cosmetics.outfit);
-    this.riderSpr = this.scene.add.sprite(0, 0, this.riderKey, 'idle_0').setOrigin(54 / 120, 104 / 130);
+    const rm = riderMeta(this.riderKey);
+    this.riderSpr = this.scene.add.sprite(0, 0, this.riderKey, 'idle_0').setOrigin(rm.ox, rm.oy);
     const visH = info.h * info.scale;
-    this.riderSpr.setScale(Phaser.Math.Clamp(visH / 150, 0.56, 0.86));
+    this.riderSpr.setScale(Phaser.Math.Clamp(visH / 150, 0.56, 0.86) * rm.scaleMul);
     this.vis.add([this.mountSpr, this.riderSpr]);
     const decor = store.state.data.cosmetics.decor[0];
     this.decorSpr = undefined;
@@ -380,8 +381,9 @@ export class Player {
     this.riderSpr.setFlipX(flip);
     const sc = info.scale;
     const so = this.mt.seat[this.mountSpr.frame.name] ?? [0, 0];
-    const seatX = (info.seat[0] - 0.5 + so[0]) * info.w * sc * this.facing;
-    const seatY = -(1 - info.seat[1] - so[1]) * info.h * sc;
+    let seatX = (info.seat[0] - 0.5 + so[0]) * info.w * sc * this.facing;
+    let seatY = -(1 - info.seat[1] - so[1]) * info.h * sc;
+    if (this.mt.seatPx) { seatX = this.mt.seatPx[0] * this.mt.scale * this.facing; seatY = this.mt.seatPx[1] * this.mt.scale; }
     this.riderSpr.setPosition(seatX, seatY);
     if (this.decorSpr) {
       this.decorSpr.setPosition(seatX + 0.2 * info.w * sc * this.facing, seatY + 0.18 * info.h * sc);

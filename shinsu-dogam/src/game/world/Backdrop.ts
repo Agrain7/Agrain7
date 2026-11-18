@@ -1,7 +1,7 @@
 // 2D 패럴랙스 배경: 하늘(고정) → 달 → 구름 → 원경 산맥 2겹 → 중경 절벽·궁궐·폭포 → 근경 꽃나무 숲
 import Phaser from 'phaser';
 import type { SkyKind } from '../../art/world.ts';
-import { ensureSky } from '../textures.ts';
+import { ensureSky, bgOverrides } from '../textures.ts';
 import { GAME_W, GAME_H } from '../config.ts';
 
 interface Layer { obj: Phaser.GameObjects.TileSprite; fx: number; fy: number; baseY: number; drift?: number }
@@ -14,12 +14,15 @@ export class Backdrop {
   falls: Phaser.GameObjects.TileSprite[] = [];
   private cliffs!: Layer;
   private t = 0;
+  /** 받은 절벽 그림에는 폭포가 그려져 있다고 보고 움직이는 폭포를 숨긴다 */
+  private hideFalls = false;
 
   private refScrollY: number;
 
   constructor(scene: Phaser.Scene, sky: SkyKind, refScrollY = 0) {
     this.refScrollY = refScrollY;
     ensureSky(scene, sky);
+    this.hideFalls = bgOverrides.has(`bg_${sky}_cliffs`);
     const k = (n: string) => `bg_${sky}_${n}`;
     scene.add.image(0, 0, k('sky')).setOrigin(0).setScrollFactor(0).setDepth(-100).setDisplaySize(GAME_W, GAME_H);
     this.moon = scene.add.image(900, 170, k('moon')).setScrollFactor(0).setDepth(-99).setScale(sky === 'mist' ? 0.6 : 0.85).setAlpha(sky === 'mist' ? 0.7 : 1);
@@ -59,7 +62,7 @@ export class Backdrop {
         f.x = fxp + rep - off;
         f.y = this.cliffs.obj.y + 230;
         f.tilePositionY -= dt * 260;
-        f.setVisible(f.x > -80 && f.x < GAME_W + 80);
+        f.setVisible(!this.hideFalls && f.x > -80 && f.x < GAME_W + 80);
       }
     }
   }

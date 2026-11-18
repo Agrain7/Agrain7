@@ -4,6 +4,7 @@ import { buildSheet } from '../art/sheet.ts';
 import { ANIM_TIMING, type AnimName } from '../art/types.ts';
 import { MONSTER_PAINTERS } from '../art/monsters.ts';
 import { drawRider, OUTFITS, RIDER_BOX, RIDER_ANIMS } from '../art/rider.ts';
+import { makeCanvas } from '../art/paint.ts';
 import { readPixels, silhouette, tintedImage } from '../art/mountFrames.ts';
 import { rigJob, type RigJob, type RigResult } from '../art/rig.ts';
 import { rigFor } from '../data/mountRigs.ts';
@@ -34,8 +35,80 @@ function addFramesAndAnims(scene: Phaser.Scene, key: string, canvas: HTMLCanvasE
   }
 }
 
+// ---------- 받은 그림(프레임 시트) 우선 사용 ----------
+// tools/pack_sprites.py 가 만든 public/assets/sprites/index.json 을 부팅 때 읽는다.
+export interface SpriteSet {
+  category: 'mounts' | 'riders' | 'monsters';
+  key: string; file: string; fw: number; fh: number; cols: number;
+  anims: Record<string, number>; origin: [number, number]; contentH: number;
+  idleBox: [number, number, number, number]; seat: [number, number] | null;
+}
+export const spriteSets = new Map<string, SpriteSet>();
+export const bgOverrides = new Set<string>();
+export const sheetKey = (s: SpriteSet) => `spr_${s.category}_${s.key}`;
+
+/** 시트 → 프레임·애니메이션 등록. want: 꼭 있어야 하는 동작 (없으면 비슷한 동작으로 대체) */
+function registerSheet(scene: Phaser.Scene, texKey: string, set: SpriteSet, source: CanvasImageSource, timing: Record<string, { fps: number; repeat: number }>, want: string[]) {
+  if (scene.textures.exists(texKey)) scene.textures.remove(texKey);
+  const [c, ctx] = makeCanvas((source as HTMLCanvasElement).width, (source as HTMLCanvasElement).height);
+  ctx.drawImage(source, 0, 0);
+  scene.textures.addCanvas(texKey, c);
+  const tex = scene.textures.get(texKey);
+  let k = 0;
+  const names: Record<string, string[]> = {};
+  for (const [anim, n] of Object.entries(set.anims)) {
+    names[anim] = [];
+    for (let i = 0; i < n; i++, k++) {
+      const fx = (k % set.cols) * set.fw, fy = Math.floor(k / set.cols) * set.fh;
+      tex.add(`${anim}_${i}`, 0, fx, fy, set.fw, set.fh);
+      names[anim].push(`${anim}_${i}`);
+    }
+  }
+  const fallback: Record<string, string[]> = { fly: ['run', 'idle'], atk: ['run', 'idle'], attack: ['run', 'idle'], hit: ['idle'], cast: ['attack', 'idle'], jump: ['run', 'idle'], fall: ['idle'], run: ['idle'], idle: ['run'] };
+  for (const anim of new Set([...want, ...Object.keys(names)])) {
+    let fr = names[anim];
+    if (!fr) for (const alt of fallback[anim] ?? []) if (names[alt]) { fr = names[alt]; break; }
+    if (!fr) continue;
+    const akey = `${texKey}:${anim}`;
+    if (scene.anims.exists(akey)) scene.anims.remove(akey);
+    const tm = timing[anim] ?? { fps: 10, repeat: -1 };
+    scene.anims.create({ key: akey, frames: fr.map((f) => ({ key: texKey, frame: f })), frameRate: tm.fps, repeat: tm.repeat });
+    // 대체 동작은 프레임 이름도 맞춰 둔다 (예: fly_0 → run_0)
+    if (!names[anim]) fr.forEach((f, i) => { if (!tex.has(`${anim}_${i}`)) { const src = tex.get(f); tex.add(`${anim}_${i}`, 0, src.cutX, src.cutY, src.cutWidth, src.cutHeight); } });
+  }
+}
+
+/** 부팅 때 호출: 받은 그림 목록을 읽고 이미지를 불러온다 (없으면 아무 일도 하지 않음) */
+export async function loadSpriteOverrides(scene: Phaser.Scene) {
+  let index: { sets?: SpriteSet[]; backgrounds?: { key: string; file: string }[] } | null = null;
+  try {
+    const res = await fetch('assets/sprites/index.json', { cache: 'no-cache' });
+    if (res.ok) index = await res.json();
+  } catch {
+    index = null;
+  }
+  if (!index) return;
+  const sets = index.sets ?? [];
+  const bgs = index.backgrounds ?? [];
+  if (!sets.length && !bgs.length) return;
+  for (const s of sets) scene.load.image(sheetKey(s), s.file);
+  for (const b of bgs) scene.load.image(b.key, b.file);
+  await new Promise<void>((resolve) => {
+    scene.load.once('complete', () => resolve());
+    scene.load.start();
+  });
+  for (const s of sets) if (scene.textures.exists(sheetKey(s))) spriteSets.set(`${s.category}/${s.key}`, s);
+  for (const b of bgs) if (scene.textures.exists(b.key)) bgOverrides.add(b.key);
+}
+
 // ---------- 영물 (원화 리깅 애니메이션) ----------
-export interface MountTex { key: string; padX: number; padTop: number; fw: number; fh: number; scale: number; seat: Record<string, [number, number]> }
+export interface MountTex {
+  key: string; originX: number; originY: number; scale: number;
+  /** 프레임별 라이더 위치 보정 (원화 대비 비율) */
+  seat: Record<string, [number, number]>;
+  /** 받은 그림: 원점 기준 라이더 위치 (텍스처 px) */
+  seatPx?: [number, number];
+}
 const mountCache = new Map<string, MountTex>();
 const mountJobs = new Map<string, RigJob>();
 const MOUNT_CACHE_MAX = 6;
@@ -75,7 +148,7 @@ function registerMount(scene: Phaser.Scene, mountId: string, stage: number, skin
     const tm = MOUNT_TIMING[anim];
     scene.anims.create({ key: akey, frames: Array.from({ length: n }, (_, i) => ({ key, frame: `${anim}_${i}` })), frameRate: tm.fps, repeat: tm.repeat });
   }
-  const mt: MountTex = { key, padX: res.padX, padTop: res.padTop, fw: res.fw, fh: res.fh, scale: info.scale, seat };
+  const mt: MountTex = { key, originX: 0.5, originY: (res.padTop + info.h) / res.fh, scale: info.scale, seat };
   mountCache.set(key, mt);
   mountJobs.delete(key);
   if (mountCache.size > MOUNT_CACHE_MAX) {
@@ -94,17 +167,43 @@ export function hasMount(scene: Phaser.Scene, mountId: string, stage: number, sk
   return mountCache.has(key) && scene.textures.exists(key);
 }
 
+/** 받은 프레임 그림으로 영물 텍스처 만들기 */
+function registerMountSheet(scene: Phaser.Scene, mountId: string, stage: number, skin: string | undefined, set: SpriteSet): MountTex {
+  const key = mountTexKey(mountId, stage, skin);
+  const info = MOUNT_ART[artKey(mountId, stage)];
+  const src = scene.textures.get(sheetKey(set)).getSourceImage() as HTMLImageElement;
+  const tint = skin ? COSMETICS[skin]?.tint : undefined;
+  let source: CanvasImageSource = src;
+  if (tint) {
+    const [c, ctx] = makeCanvas(src.width, src.height);
+    ctx.putImageData(readPixels(src, src.width, src.height, tint), 0, 0);
+    source = c;
+  }
+  registerSheet(scene, key, set, source, MOUNT_TIMING, ['idle', 'run', 'fly', 'atk']);
+  const [ox, oy] = set.origin;
+  const ib = set.idleBox;
+  const seatPx: [number, number] = set.seat
+    ? [set.seat[0] - ox * set.fw, set.seat[1] - oy * set.fh]
+    : [ib[0] + info.seat[0] * ib[2] - ox * set.fw, ib[1] + info.seat[1] * ib[3] - oy * set.fh];
+  const mt: MountTex = { key, originX: ox, originY: oy, scale: (info.h * info.scale) / Math.max(1, set.contentH), seat: {}, seatPx };
+  mountCache.set(key, mt);
+  return mt;
+}
+
 /** 즉시 필요할 때 (남은 계산을 한 번에 끝냄) */
 export function ensureMount(scene: Phaser.Scene, mountId: string, stage: number, skin?: string): MountTex {
   const key = mountTexKey(mountId, stage, skin);
   const hit = mountCache.get(key);
   if (hit && scene.textures.exists(key)) { mountCache.delete(key); mountCache.set(key, hit); return hit; }
+  const set = spriteSets.get(`mounts/${artKey(mountId, stage)}`);
+  if (set) return registerMountSheet(scene, mountId, stage, skin, set);
   return registerMount(scene, mountId, stage, skin, mountJob(scene, mountId, stage, skin).finish());
 }
 
 /** 미리 만들어 두기: 프레임마다 몇 ms씩 나눠 계산해 끊김 없이 준비 */
 export function prewarmMount(scene: Phaser.Scene, mountId: string, stage: number, skin?: string, onDone?: () => void) {
   if (hasMount(scene, mountId, stage, skin)) { onDone?.(); return; }
+  if (spriteSets.has(`mounts/${artKey(mountId, stage)}`)) { ensureMount(scene, mountId, stage, skin); onDone?.(); return; }
   const job = mountJob(scene, mountId, stage, skin);
   const ev = scene.time.addEvent({
     delay: 16, loop: true,
@@ -128,9 +227,24 @@ export function ensurePortrait(scene: Phaser.Scene, mountId: string, stage: numb
 }
 
 // ---------- 라이더 ----------
+export interface RiderMeta { ox: number; oy: number; scaleMul: number; face: [number, number, number] }
+const riderMetas = new Map<string, RiderMeta>();
+const RIDER_DEFAULT: RiderMeta = { ox: 54 / 120, oy: 104 / 130, scaleMul: 1, face: [56, 46, 32] };
+export function riderMeta(key: string): RiderMeta {
+  return riderMetas.get(key) ?? RIDER_DEFAULT;
+}
+
 export function ensureRider(scene: Phaser.Scene, outfit: string): string {
   const key = `rider_${outfit}`;
   if (scene.textures.exists(key)) return key;
+  const set = spriteSets.get(`riders/${outfit}`) ?? spriteSets.get('riders/outfit_default');
+  if (set && (set.key === outfit || !OUTFITS[outfit])) {
+    registerSheet(scene, key, set, scene.textures.get(sheetKey(set)).getSourceImage() as HTMLImageElement, ANIM_TIMING as Record<string, { fps: number; repeat: number }>, Object.keys(RIDER_ANIMS));
+    const ib = set.idleBox;
+    const sx = set.seat ? set.seat[0] : ib[0] + ib[2] / 2, sy = set.seat ? set.seat[1] : ib[1] + ib[3] * 0.8;
+    riderMetas.set(key, { ox: sx / set.fw, oy: sy / set.fh, scaleMul: 105 / Math.max(1, set.contentH), face: [ib[0] + ib[2] / 2, ib[1] + ib[2] * 0.32, ib[2] * 0.36] });
+    return key;
+  }
   const o = OUTFITS[outfit] ?? OUTFITS.outfit_default;
   const sheet = buildSheet(RIDER_BOX, RIDER_ANIMS, (ctx, pose) => drawRider(ctx, pose, o));
   addFramesAndAnims(scene, key, sheet.canvas, sheet.frames, RIDER_ANIMS as Record<string, number>);
@@ -141,26 +255,40 @@ export function ensureRider(scene: Phaser.Scene, outfit: string): string {
 export function ensureMonster(scene: Phaser.Scene, id: string): string {
   const key = `mon_${id}`;
   if (scene.textures.exists(key)) return key;
+  const set = spriteSets.get(`monsters/${id}`);
+  if (set) {
+    const want = Object.keys(MONSTER_PAINTERS[id]?.anims ?? { idle: 1 });
+    registerSheet(scene, key, set, scene.textures.get(sheetKey(set)).getSourceImage() as HTMLImageElement, ANIM_TIMING as Record<string, { fps: number; repeat: number }>, want);
+    return key;
+  }
   const p = MONSTER_PAINTERS[id];
   const sheet = buildSheet(p.box, p.anims, (ctx, pose) => p.draw(ctx, pose));
   addFramesAndAnims(scene, key, sheet.canvas, sheet.frames, p.anims as Record<string, number>);
   return key;
 }
 export function monsterBox(id: string) {
+  const set = spriteSets.get(`monsters/${id}`);
+  if (set) return { w: set.fw, h: set.fh, ox: set.origin[0] * set.fw, oy: set.origin[1] * set.fh };
   return MONSTER_PAINTERS[id].box;
+}
+/** 받은 몬스터 그림은 기존 크기에 맞춰 축소·확대 */
+export function monsterScale(id: string) {
+  const set = spriteSets.get(`monsters/${id}`);
+  return set ? (MONSTER_PAINTERS[id].box.h * 0.8) / Math.max(1, set.contentH) : 1;
 }
 
 // ---------- 하늘/배경 ----------
 export function ensureSky(scene: Phaser.Scene, sky: W.SkyKind) {
   const k = (n: string) => `bg_${sky}_${n}`;
-  if (scene.textures.exists(k('sky'))) return;
-  addCanvas(scene, k('sky'), W.paintSky(sky));
-  addCanvas(scene, k('moon'), W.paintMoon(sky));
-  addCanvas(scene, k('clouds'), W.paintCloudBand(sky));
-  addCanvas(scene, k('mount0'), W.paintMountains(sky, 0));
-  addCanvas(scene, k('mount1'), W.paintMountains(sky, 1));
-  addCanvas(scene, k('cliffs'), W.paintCliffs(sky).canvas);
-  addCanvas(scene, k('grove'), W.paintGrove(sky));
+  // 받은 배경 그림이 있으면 그 층은 그대로 쓰고, 없는 층만 그린다
+  const layer = (n: string, paint: () => HTMLCanvasElement) => { if (!scene.textures.exists(k(n))) addCanvas(scene, k(n), paint()); };
+  layer('sky', () => W.paintSky(sky));
+  layer('moon', () => W.paintMoon(sky));
+  layer('clouds', () => W.paintCloudBand(sky));
+  layer('mount0', () => W.paintMountains(sky, 0));
+  layer('mount1', () => W.paintMountains(sky, 1));
+  layer('cliffs', () => W.paintCliffs(sky).canvas);
+  layer('grove', () => W.paintGrove(sky));
 }
 
 /** 부팅 시 한 번 생성하는 공용 텍스처 */
