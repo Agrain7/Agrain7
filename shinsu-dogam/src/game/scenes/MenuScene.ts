@@ -22,6 +22,9 @@ import { analytics } from '../../services/analytics/Analytics.ts';
 import { overlayQueue } from '../overlayQueue.ts';
 import * as L from '../../systems/live.ts';
 import type { WorldScene } from './WorldScene.ts';
+import { playStory } from '../../ui/dialogue.ts';
+import { CHAPTERS, SCENES, SCENE_ORDER, LORE } from '../../data/story.ts';
+import { GameState } from '../../systems/state.ts';
 
 type Tab = 'stable' | 'codex' | 'daily' | 'pass' | 'expedition' | 'quests' | 'inventory' | 'shop' | 'settings';
 const TABS: [Tab, string][] = [['stable', '영물'], ['codex', '도감'], ['daily', '일일'], ['pass', '수행록'], ['expedition', '원정'], ['quests', '퀘스트'], ['inventory', '소지품'], ['shop', '상점'], ['settings', '설정']];
@@ -39,6 +42,9 @@ export class MenuScene extends Phaser.Scene {
   private tabBtns: Pill[] = [];
   private selMount: MountId = 'wolf';
   private codexSel: MountId | null = null;
+  private codexView: 'beasts' | 'story' | 'lore' = 'beasts';
+  /** 회상 장면이 떠 있는 동안 Esc 로 메뉴가 닫히지 않게 */
+  private talking = false;
   private shopCat: ProductCategory = 'skin';
   private dots!: Phaser.GameObjects.Container;
   /** 이번 화면의 끌어 넘기는 목록들 (다시 그릴 때 위치를 기억했다가 이어서) */
@@ -57,6 +63,8 @@ export class MenuScene extends Phaser.Scene {
     this.from = data.from ?? 'Map';
     this.selMount = store.state.data.activeMount;
     this.codexSel = null;
+    this.codexView = 'beasts';
+    this.talking = false;
     this.keep = {};
     this.areas = new Map();
   }
@@ -101,7 +109,7 @@ export class MenuScene extends Phaser.Scene {
       if (again) this.render();
     } });
     this.content = this.add.container(0, 0);
-    this.input.keyboard?.on('keydown-ESC', () => this.close());
+    this.input.keyboard?.on('keydown-ESC', () => { if (!this.talking) this.close(); });
     if (this.tab === 'shop') analytics.track('shop_view', { from: this.from });
     this.render();
   }
@@ -138,7 +146,12 @@ export class MenuScene extends Phaser.Scene {
     st.updateQuests();
     switch (this.tab) {
       case 'stable': this.renderStable(c); break;
-      case 'codex': this.codexSel ? this.renderCodexDetail(c, this.codexSel) : this.renderCodex(c); break;
+      case 'codex':
+        if (this.codexSel) this.renderCodexDetail(c, this.codexSel);
+        else if (this.codexView === 'story') this.renderStory(c);
+        else if (this.codexView === 'lore') this.renderLore(c);
+        else this.renderCodex(c);
+        break;
       case 'quests': this.renderQuests(c); break;
       case 'inventory': this.renderInventory(c); break;
       case 'shop': this.renderShop(c); break;
@@ -344,8 +357,8 @@ export class MenuScene extends Phaser.Scene {
   private renderCodex(c: Phaser.GameObjects.Container) {
     const st = store.state;
     const comp = st.codexCompletion();
-    this.title(c, '영물 도감', '靈物圖鑑');
-    this.t(c, X0 + 782, TOP + 10, `수집 ${comp.owned}/${comp.total} · 성장 기록 ${comp.stagesSeen}/${comp.stagesTotal} · 완성률 ${comp.pct}%`, 15, SUB).setOrigin(1, 0);
+    this.codexHeader(c);
+    this.t(c, X0 + 782, TOP + 10, `수집 ${comp.owned}/${comp.total} · 완성률 ${comp.pct}%`, 15, SUB).setOrigin(1, 0);
     const { a: grid } = this.area('grid', X0 + 26, Y0 + 134, 760, H - 156);
     const CW = 242, CH = 152;
     MOUNT_ORDER.forEach((id, i) => {
@@ -375,6 +388,74 @@ export class MenuScene extends Phaser.Scene {
     });
     this.t(ach.content, 6, achs.length * 70 + 4, `고서 조각 ${st.data.lorePages.length}장 수집`, 14, SUB);
     ach.setContentSize(achs.length * 70 + 30);
+  }
+
+  /** 도감 머리: 제목 + 영물 / 이야기 / 고서 */
+  private codexHeader(c: Phaser.GameObjects.Container) {
+    this.title(c, '신수도감', '神獸圖鑑');
+    ([['beasts', '영물'], ['story', '이야기'], ['lore', '고서']] as const).forEach(([v, label], i) => {
+      c.add(pill(this, X0 + 330 + i * 112, TOP + 18, 104, label, this.codexView === v, () => { if (this.codexView !== v) { this.codexView = v; this.render(); } }, 16));
+    });
+  }
+
+  /** 이야기 회상: 장마다 본 장면을 다시 보기 */
+  private renderStory(c: Phaser.GameObjects.Container) {
+    const st = store.state;
+    this.codexHeader(c);
+    const seenN = SCENE_ORDER.filter((id) => st.storySeen(id)).length;
+    this.t(c, X0 + W - 40, TOP + 10, `본 장면 ${seenN} / ${SCENE_ORDER.length}`, 15, SUB).setOrigin(1, 0);
+    const { a } = this.area('story', X0 + 26, Y0 + 134, W - 58, H - 156);
+    const ac = a.content;
+    const CW = 364, CH = 64;
+    let y = 0;
+    for (const ch of CHAPTERS) {
+      const ids = SCENE_ORDER.filter((id) => SCENES[id].chapter === ch.n);
+      if (!ids.length) continue;
+      this.t(ac, 6, y + 4, ch.head, 15, RED, { title: true });
+      this.t(ac, 64, y, ch.name, 20, INK, { title: true });
+      y += 36;
+      ids.forEach((id, i) => {
+        const x = (i % 3) * (CW + 10), yy = y + Math.floor(i / 3) * (CH + 10);
+        const seen = st.storySeen(id) || GameState.openAll;
+        const cd = card(this, x, yy, CW, CH, seen ? 'normal' : 'lock');
+        a.add(cd);
+        this.t(ac, x + 18, yy + 20, seen ? SCENES[id].label : '아직 보지 못한 장면', 17, seen ? INK : '#8a7a6a', { title: true });
+        if (seen) {
+          this.t(ac, x + CW - 16, yy + 22, '▶ 보기', 14, RED, { title: true }).setOrigin(1, 0);
+          tap(cd, () => {
+            audio.play('select');
+            this.talking = true;
+            playStory(this, id, { hideScrolls: true, dim: 0.6, chapterCard: id.endsWith('_arrive') || id === 'prologue' || id === 'ending', onDone: () => { this.talking = false; this.render(); } });
+          });
+        }
+      });
+      y += Math.ceil(ids.length / 3) * (CH + 10) + 14;
+    }
+    a.setContentSize(y);
+  }
+
+  /** 고서: 고서 조각을 모을수록 신수도감의 옛 기록이 복원된다 */
+  private renderLore(c: Phaser.GameObjects.Container) {
+    const st = store.state;
+    this.codexHeader(c);
+    const have = st.data.lorePages.length;
+    this.t(c, X0 + W - 40, TOP + 10, `모은 고서 조각 ${have}장 · 복원 ${LORE.filter((l) => have >= l.need).length} / ${LORE.length}`, 15, SUB).setOrigin(1, 0);
+    const { a } = this.area('lore', X0 + 26, Y0 + 134, W - 58, H - 156);
+    const ac = a.content;
+    const RW = W - 70;
+    let y = 0;
+    LORE.forEach((l, i) => {
+      const open = have >= l.need;
+      const body = open ? txt(this, 150, 0, l.text, 16, INK, { wordWrap: { width: RW - 180, useAdvancedWrap: true }, lineSpacing: 6 }) : null;
+      const h = Math.max(70, (body?.height ?? 20) + 40);
+      a.add(card(this, 0, y, RW, h, open ? 'normal' : 'lock'));
+      this.t(ac, 22, y + 14, `제${i + 1}장`, 14, open ? RED : '#9a8a7a', { title: true });
+      this.t(ac, 22, y + 34, open ? l.title : '???', 18, open ? INK : '#8a7a6a', { title: true });
+      if (body) { body.setY(y + 20); ac.add(body); }
+      else this.t(ac, 150, y + 26, `고서 조각 ${l.need}장을 모으면 복원됩니다 (지금 ${have}장)`, 15, '#8a7a6a');
+      y += h + 10;
+    });
+    a.setContentSize(y);
   }
 
   private renderCodexDetail(c: Phaser.GameObjects.Container, id: MountId) {
@@ -481,7 +562,9 @@ export class MenuScene extends Phaser.Scene {
     const px = X0 + 830, py = Y0 + 300, pw = 322;
     c.add(card(this, px, py, pw, 270, 'dark'));
     const moon = this.add.graphics();
-    moon.fillStyle(0xffe6a6, 0.18).fillCircle(px + pw - 54, py + 54, 34);
+    // 초승달
+    moon.fillStyle(0xffe6a6, 0.9).fillCircle(px + pw - 50, py + 44, 20);
+    moon.fillStyle(0x2b2438, 1).fillCircle(px + pw - 42, py + 38, 18);
     c.add(moon);
     this.t(c, px + pw / 2, py + 18, '달빛 정기권', 24, '#ffe6a6', { title: true }).setOrigin(0.5, 0);
     const active = L.monthlyActive(st);

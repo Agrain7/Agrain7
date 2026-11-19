@@ -8,7 +8,7 @@ for (const id of stages) {
   const page = await (await browser.newContext({ viewport: { width: 1280, height: 720 } })).newPage();
   const errs = [];
   page.on('pageerror', (e) => errs.push(e.message));
-  await page.goto(`http://localhost:5173/?debug&stage=${id}`);
+  await page.goto(`http://localhost:5173/?debug&nostory&stage=${id}`);
   await page.waitForFunction(() => window.__SD_READY__ === true, null, { timeout: 60000 });
   await page.waitForTimeout(1200);
   const res = await page.evaluate(async (LEVEL) => {

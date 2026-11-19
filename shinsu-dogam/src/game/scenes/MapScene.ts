@@ -2,6 +2,9 @@ import Phaser from 'phaser';
 import { Backdrop } from '../world/Backdrop.ts';
 import { txt, panel, button, bar, toast, card, fitInto, sectionTitle, tap, resetScrolls } from '../../ui/widgets.ts';
 import { ScrollArea } from '../../ui/scroll.ts';
+import { playStory } from '../../ui/dialogue.ts';
+import { CHAPTERS, SCENES } from '../../data/story.ts';
+import { GameState } from '../../systems/state.ts';
 import { store } from '../ctx.ts';
 import { STAGES } from '../../data/maps/wolha.ts';
 import { REGIONS, regionOf } from '../../data/regions.ts';
@@ -10,7 +13,7 @@ import { MOUNTS } from '../../data/mounts.ts';
 import { ensurePortrait } from '../textures.ts';
 import { expToNext } from '../../systems/state.ts';
 import { QUESTS } from '../../data/quests.ts';
-import { GAME_W, GAME_H, COLORS, AUTOTEST } from '../config.ts';
+import { GAME_W, GAME_H, COLORS, AUTOTEST, STORY_ON } from '../config.ts';
 import { audio } from '../../systems/audio.ts';
 
 const NODE_POS: [number, number][] = [[200, 330], [300, 248], [410, 312], [510, 208], [610, 276], [690, 178]];
@@ -28,6 +31,8 @@ export class MapScene extends Phaser.Scene {
   private lockLayer?: Phaser.GameObjects.Container;
   /** 함께할 영물 고르는 가로 띠 (끌어 넘기기) */
   private strip?: ScrollArea;
+  /** 이야기 장면이 떠 있는 동안 Enter/Space 로 출발하지 않게 */
+  private talking = false;
   private stripPos?: number;
   private get regionStages() { return STAGES.filter((s) => s.id.startsWith(`${this.region}-`)); }
 
@@ -74,7 +79,7 @@ export class MapScene extends Phaser.Scene {
       }
     });
     // 하루 첫 방문: 출석 보상 안내 (자동으로 일일 탭)
-    if (!AUTOTEST && L.canClaimLogin(st) && st.data.stages['1-1']?.cleared) this.time.delayedCall(400, () => this.openMenu('daily'));
+    const wantDaily = !AUTOTEST && L.canClaimLogin(st) && !!st.data.stages['1-1']?.cleared;
     // 키보드
     const kb = this.input.keyboard;
     kb?.on('keydown-RIGHT', () => this.pick(Math.min(this.regionStages.length - 1, this.sel + 1)));
@@ -85,6 +90,11 @@ export class MapScene extends Phaser.Scene {
     kb?.on('keydown-SPACE', () => this.start());
     this.events.on('resume', () => this.scene.restart());
     if (AUTOTEST) this.time.delayedCall(300, () => this.start());
+    // 놓친 만남 장면 (메뉴에서 퀘스트 보상으로 영물을 받은 경우 등): 지도에서 한 번 보여 준다
+    const pend = STORY_ON && !GameState.openAll ? ['hawk', 'cheongryong', 'jujak'].find((id) => st.owns(id as never) && SCENES[`meet_${id}`] && !st.storySeen(`meet_${id}`)) : undefined;
+    this.talking = false;
+    if (pend) this.time.delayedCall(500, () => { this.talking = true; playStory(this, `meet_${pend}`, { hideScrolls: true, dim: 0.5, onDone: () => { this.talking = false; if (wantDaily) this.openMenu('daily'); } }); });
+    else if (wantDaily) this.time.delayedCall(400, () => this.openMenu('daily'));
   }
 
   /** 지역 지도: 이름·설명·6구간 길·수호 영물·지역 별 보상 */
@@ -98,7 +108,8 @@ export class MapScene extends Phaser.Scene {
     this.nodes = [];
     const lay = this.regionLayer;
     lay.add(txt(this, 110, 92, R.name, 34, COLORS.text, { title: true }));
-    lay.add(txt(this, 112 + R.name.length * 34 + 10, 104, `${R.hanja} · ${R.subtitle}`, 17, '#7a5a3a', { title: true }));
+    const ch = CHAPTERS.find((c) => c.n === R.n);
+    lay.add(txt(this, 112 + R.name.length * 34 + 10, 104, `${R.hanja} · ${ch ? `${ch.head} ${ch.name}` : R.subtitle}`, 17, '#7a5a3a', { title: true }));
     const prev = button(this, 72, 112, 50, 50, '◀', () => this.switchRegion(-1), 'normal', 20);
     const next = button(this, 748, 112, 50, 50, '▶', () => this.switchRegion(1), 'normal', 20);
     prev.setEnabled(this.region > 1);
@@ -112,6 +123,19 @@ export class MapScene extends Phaser.Scene {
     for (const [x, y, sc] of [[160, 250, 1], [420, 200, 1.2], [640, 300, 0.9]] as const) {
       g.fillStyle(0x8c86b3, 0.25);
       g.fillTriangle(x - 70 * sc, y + 60 * sc, x, y - 40 * sc, x + 70 * sc, y + 60 * sc);
+    }
+    // 이어진 길: 돌파한 구간 사이는 금빛 기운이 흐른다 (달려서 길을 잇는다)
+    const lit = this.regionStages.map((s2) => !!st.data.stages[s2.id]?.cleared);
+    for (let i = 1; i < NODE_POS.length; i++) {
+      if (!lit[i - 1] || !(lit[i] || st.isUnlocked(this.regionStages[i]?.id ?? ''))) continue;
+      const [ax, ay] = NODE_POS[i - 1], [bx, by] = NODE_POS[i];
+      g.lineStyle(10, 0xffd36a, 0.22).lineBetween(ax + 30, ay + 40, bx + 30, by + 40);
+      g.lineStyle(4, 0xffe6a6, lit[i] ? 0.95 : 0.5).lineBetween(ax + 30, ay + 40, bx + 30, by + 40);
+      if (lit[i]) for (let k = 0; k < 2; k++) {
+        const w = this.add.image(ax + 30, ay + 40, 'wisp_gold').setScale(0.9).setBlendMode(Phaser.BlendModes.ADD).setAlpha(0.9);
+        lay.add(w);
+        this.tweens.add({ targets: w, x: bx + 30, y: by + 40, duration: 1600, delay: k * 800 + i * 120, repeat: -1 });
+      }
     }
     lay.add(g);
     this.regionStages.forEach((s, i) => this.nodes.push(this.makeNode(i, s.id, s.subtitle)));
@@ -264,6 +288,7 @@ export class MapScene extends Phaser.Scene {
   }
 
   private start() {
+    if (this.talking) return;
     const s = this.regionStages[this.sel];
     if (!store.state.isUnlocked(s.id)) {
       toast(this, '아직 열리지 않은 구간입니다');

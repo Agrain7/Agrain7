@@ -4,7 +4,7 @@
 export type AnalyticsEvent =
   | 'game_start' | 'tutorial_complete' | 'stage_start' | 'stage_clear' | 'monster_defeat' | 'mount_unlock'
   | 'mount_level_up' | 'mount_evolve' | 'codex_entry' | 'shop_view' | 'purchase_start' | 'purchase_success' | 'purchase_fail'
-  | 'purchase_refund' | 'session_end';
+  | 'purchase_refund' | 'session_end' | 'story_view' | 'ending_reached';
 
 export interface AnalyticsProvider { send(name: AnalyticsEvent, props: Record<string, unknown>, at: number): void }
 

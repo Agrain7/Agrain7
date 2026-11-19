@@ -11,6 +11,7 @@ import { ensurePortrait } from '../textures.ts';
 import { GAME_W, GAME_H, COLORS, AUTOTEST } from '../config.ts';
 import { audio } from '../../systems/audio.ts';
 import { controls } from '../controls.ts';
+import { playStory } from '../../ui/dialogue.ts';
 
 export class OverlayScene extends Phaser.Scene {
   private busy = false;
@@ -222,6 +223,11 @@ export class OverlayScene extends Phaser.Scene {
         this.layer.add(txt(this, cx, GAME_H / 2, gName ? `${rg}에 빛이 돌아왔다. 정화된 ${gName}이(가) 동료가 되고 싶어 한다!` : `${rg}에 빛이 돌아왔다. 수호신은 고마움의 표시로 영기석을 남겼다.`, 20, '#f6ead0', { stroke: '#1d1a2b', strokeThickness: 4 }).setOrigin(0.5));
         this.layer.add(txt(this, cx, GAME_H / 2 + 36, `${item.reward ?? '영기석 +8 · 월하 꽃잎 +5 · 금화 +300'} — 홍살문으로 나아가자`, 18, '#ffe6a6').setOrigin(0.5));
         this.layer.add(button(this, cx, GAME_H / 2 + 120, 200, 58, '확인', () => this.done(), 'primary', 22));
+        break;
+      }
+      case 'story': {
+        // 이야기 장면 (지역 도착이면 장 제목 카드부터)
+        playStory(this, item.id, { dim: 0.4, chapterCard: item.id.endsWith('_arrive'), cardSub: item.sub, onDone: () => this.done() });
         break;
       }
       case 'message': {

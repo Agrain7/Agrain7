@@ -4,6 +4,7 @@ import { GAME_W, GAME_H } from './game/config.ts';
 import { BootScene } from './game/scenes/BootScene.ts';
 import { TitleScene } from './game/scenes/TitleScene.ts';
 import { IntroScene } from './game/scenes/IntroScene.ts';
+import { EndingScene } from './game/scenes/EndingScene.ts';
 import { MapScene } from './game/scenes/MapScene.ts';
 import { WorldScene } from './game/scenes/WorldScene.ts';
 import { HudScene } from './game/scenes/HudScene.ts';
@@ -25,7 +26,7 @@ const game = new Phaser.Game({
   scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
   input: { activePointers: 4 },
   render: { antialias: true, pixelArt: false, roundPixels: false },
-  scene: [BootScene, TitleScene, IntroScene, MapScene, WorldScene, HudScene, MenuScene, OverlayScene],
+  scene: [BootScene, TitleScene, IntroScene, MapScene, WorldScene, HudScene, MenuScene, OverlayScene, EndingScene],
 });
 
 // 탭을 닫거나 숨길 때 자동 저장 + 세션 종료 기록

@@ -5,6 +5,31 @@ import Phaser from 'phaser';
 import { dragGuard, scrollCams, scrollsHidden } from './widgets.ts';
 
 let regionSeq = 0;
+
+/** 목록 카메라는 자기 목록만 그린다: 화면 고정(scrollFactor 0) 배경·알림 글자 등이 목록 칸 안에 겹쳐 그려지지 않게,
+ *  매 프레임 그리기 직전에 목록 내용이 아닌 것에 '목록 카메라 제외' 표시를 붙인다 */
+const registry = new WeakMap<Phaser.Scene, { cams: Set<Phaser.Cameras.Scene2D.Camera>; contents: Set<Phaser.GameObjects.GameObject> }>();
+function register(scene: Phaser.Scene, cam: Phaser.Cameras.Scene2D.Camera, content: Phaser.GameObjects.GameObject) {
+  let r = registry.get(scene);
+  if (!r) {
+    const rr = { cams: new Set<Phaser.Cameras.Scene2D.Camera>(), contents: new Set<Phaser.GameObjects.GameObject>() };
+    r = rr;
+    registry.set(scene, rr);
+    scene.events.on('prerender', () => {
+      if (!rr.cams.size) return;
+      let bits = 0;
+      for (const c of rr.cams) bits |= c.id;
+      for (const ch of scene.children.list) if (!rr.contents.has(ch)) ch.cameraFilter |= bits;
+    });
+  }
+  r.cams.add(cam);
+  r.contents.add(content);
+}
+function unregister(scene: Phaser.Scene, cam: Phaser.Cameras.Scene2D.Camera, content: Phaser.GameObjects.GameObject) {
+  const r = registry.get(scene);
+  r?.cams.delete(cam);
+  r?.contents.delete(content);
+}
 /** 입력 사건이 일어난 시각 (처리 지연과 무관) */
 const evTime = (p: Phaser.Input.Pointer) => (p.event && p.event.timeStamp > 0 ? p.event.timeStamp : performance.now());
 
@@ -37,6 +62,7 @@ export class ScrollArea {
     this.cam = scene.cameras.add(x, y, w, h).setScroll(this.ox, this.oy);
     this.cam.transparent = true;
     this.cam.setVisible(!scrollsHidden(scene));
+    register(scene, this.cam, this.content);
     if (!scrollCams.has(scene)) scrollCams.set(scene, new Set());
     scrollCams.get(scene)!.add(this.cam);
     if (opts.bar !== false) this.bar = scene.add.graphics().setDepth(1000);
@@ -151,6 +177,7 @@ export class ScrollArea {
     for (const [ev, fn] of this.handlers) this.scene.input.off(ev, fn);
     this.scene.events.off('update', this.tick, this);
     scrollCams.get(this.scene)?.delete(this.cam);
+    unregister(this.scene, this.cam, this.content);
     try { this.scene.cameras.remove(this.cam); } catch { /* 장면이 이미 닫힘 */ }
     this.content.destroy();
     this.bar?.destroy();

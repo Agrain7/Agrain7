@@ -6,7 +6,7 @@ import { COSMETICS } from '../data/cosmetics.ts';
 import { STAGES } from '../data/maps/wolha.ts';
 import { newLive, type LiveData } from './live.ts';
 
-export const SAVE_VERSION = 4;
+export const SAVE_VERSION = 5;
 export const SAVE_KEY = 'shinsu-dogam.save';
 
 export interface MountState {
@@ -43,6 +43,8 @@ export interface SaveData extends LiveData {
   gifts: string[];
   /** 구매 계정 키 (토스 customerKey 겸 '구매 복구 코드') — 서버 구매 기록과 연결 */
   account: { customerKey: string };
+  /** 본 이야기 장면 id (src/data/story.ts) */
+  story: { seen: string[] };
 }
 
 /** 구매 계정 키: 영문·숫자 28자 (토스 customerKey 허용 문자 안, 추측하기 어렵게) */
@@ -83,6 +85,7 @@ export function newSave(now = Date.now()): SaveData {
     tutorialDone: false,
     gifts: [],
     account: { customerKey: newCustomerKey() },
+    story: { seen: [] },
     ...newLive(),
   };
 }
@@ -108,6 +111,8 @@ export function migrate(raw: unknown): SaveData {
     regionRewards: [...(d.regionRewards ?? [])],
     // v3 → v4: 구매 계정 키
     account: d.account?.customerKey ? { ...d.account } : base.account,
+    // v4 → v5: 이야기 (이미 지나온 장면은 다시 띄우지 않도록 진행 기준으로 판단 — WorldScene)
+    story: { seen: [...(d.story?.seen ?? [])] },
     version: SAVE_VERSION,
   };
   // v1 → v2: 성장 기록(history) 필드 추가
@@ -407,6 +412,10 @@ export class GameState {
   }
 
   // ---------- 도감 ----------
+  /** 이야기 장면을 이미 봤는가 */
+  storySeen(id: string) { return this.data.story.seen.includes(id); }
+  markStory(id: string) { if (!this.storySeen(id)) this.data.story.seen.push(id); }
+
   codexCompletion() {
     const owned = MOUNT_ORDER.filter((id) => this.owns(id)).length;
     const stagesSeen = this.ownedMounts().reduce((n, m) => n + m.stage + 1, 0);

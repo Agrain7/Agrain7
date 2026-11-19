@@ -9,7 +9,8 @@ export type OverlayItem =
   | { type: 'faint' }
   | { type: 'boss'; title: string; sub: string }
   | { type: 'purified'; name?: string; region?: string; reward?: string; guardian?: string }
-  | { type: 'message'; title: string; body: string };
+  | { type: 'message'; title: string; body: string }
+  | { type: 'story'; id: string; sub?: string };
 
 type Listener = () => void;
 const queue: OverlayItem[] = [];

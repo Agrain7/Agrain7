@@ -13,6 +13,7 @@ import { regionOf } from '../../data/regions.ts';
 import { addPassXp, computeStars } from '../../systems/live.ts';
 import { prewarmMonster, releaseMonster } from '../textures.ts';
 import { MONSTER_ART, monsterImageKey } from '../../data/monsterArt.ts';
+import { SCENES, BARKS, type Line } from '../../data/story.ts';
 import { MONSTERS } from '../../data/monsters.ts';
 import { MOUNTS } from '../../data/mounts.ts';
 import { ITEMS } from '../../data/items.ts';
@@ -20,7 +21,7 @@ import { QUESTS } from '../../data/quests.ts';
 import { audio } from '../../systems/audio.ts';
 import { analytics } from '../../services/analytics/Analytics.ts';
 import { overlayQueue } from '../overlayQueue.ts';
-import { GAME_W, GAME_H, DEBUG } from '../config.ts';
+import { GAME_W, GAME_H, DEBUG, STORY_ON } from '../config.ts';
 import { prewarmMount } from '../textures.ts';
 import { ULT_GAIN } from '../../data/beastSkills.ts';
 import type { GameEvent } from '../../systems/state.ts';
@@ -39,6 +40,8 @@ export class WorldScene extends Phaser.Scene {
   private respawn = { x: 0, y: 0 };
   private startTime = 0;
   private cleared = false;
+  /** 이번 돌파가 처음인가 (종장 판단) */
+  private firstClear = false;
   private bossStarted = false;
   private saveT = 30;
   private shrineMsgT = 0;
@@ -136,7 +139,14 @@ export class WorldScene extends Phaser.Scene {
     this.startTime = this.time.now;
     this.saveT = 30;
     analytics.track('stage_start', { stage: map.id, mount: store.state.data.activeMount });
-    this.time.delayedCall(50, () => this.hudTitle(`${map.name} ${map.id}`, map.subtitle));
+    // 이야기: 지역 첫 구간이면 도착 장면(장 제목 카드가 구간 제목을 겸함), 그 밖의 구간은 처음 달릴 때 짧은 한마디 (멈추지 않음)
+    const stR = regionOf(map.id);
+    this.firstClear = false;
+    const fresh = !store.state.data.stages[map.id]?.cleared;
+    const arrive = fresh && map.id === `${stR.n}-1` && STORY_ON && !store.state.storySeen(`r${stR.n}_arrive`);
+    if (arrive) this.time.delayedCall(350, () => this.story(`r${stR.n}_arrive`, `${map.name} ${map.id} · ${map.subtitle}`));
+    else this.time.delayedCall(50, () => this.hudTitle(`${map.name} ${map.id}`, map.subtitle));
+    if (fresh && BARKS[map.id]) this.time.delayedCall(3000, () => this.bark(BARKS[map.id]));
     // 보유 영물 애니메이션을 미리 만들어 둔다 (교체 시 끊김 방지, 구간 시작 연출 동안 한 마리씩)
     store.state.ownedMounts()
       .filter((m) => m.id !== store.state.data.activeMount)
@@ -193,6 +203,19 @@ export class WorldScene extends Phaser.Scene {
   }
 
   // ---------------- 게임 이벤트 ----------------
+  /** 이야기 장면을 연출 줄에 올린다 (이미 봤거나 자동 테스트면 건너뜀) */
+  private story(id: string, sub?: string) {
+    if (!STORY_ON || !SCENES[id] || store.state.storySeen(id)) return false;
+    overlayQueue.push({ type: 'story', id, sub });
+    return true;
+  }
+  /** 달리는 중 한마디 (말하는 영물이 아직 동료가 아니면 생략) */
+  private bark(l: Line) {
+    if (!STORY_ON || this.cleared) return;
+    if (l.who !== 'haram' && l.who !== 'narr' && l.who !== 'boss' && !store.state.owns(l.who)) return;
+    this.events.emit('hud-bark', l.who, l.text);
+  }
+
   private onGameEvent(e: GameEvent) {
     const st = store.state;
     switch (e.type) {
@@ -219,6 +242,7 @@ export class WorldScene extends Phaser.Scene {
         analytics.track('mount_evolve', { mount: e.mount, stage: e.stage });
         break;
       case 'mountObtained':
+        this.story(`meet_${e.mount}`);
         overlayQueue.push({ type: 'acquire', mount: e.mount });
         analytics.track('mount_unlock', { mount: e.mount });
         analytics.track('codex_entry', { mount: e.mount });
@@ -276,13 +300,15 @@ export class WorldScene extends Phaser.Scene {
     st.addItem('gold', gold);
     st.addItem('spirit_stone', stones);
     st.addItem('moon_petal', 5);
-    st.addExp(b.exp);
     addPassXp(st, 300);
     this.events.emit('boss-hp', 0, 1, false);
     overlayQueue.push({ type: 'purified', name: b.def.name, region: R.name, reward: `영기석 +${stones} · 월하 꽃잎 +5 · 금화 +${gold}`, guardian: firstTime && R.guardian && !st.owns(R.guardian) ? R.guardian : undefined });
+    if (firstTime) this.story(`r${R.n}_purified`);
     // 정화된 수호 영물이 동료가 된다
     // (월드가 정화 연출로 멈추므로 지연 호출 대신 바로 — 합류 연출은 정화 연출 다음 차례로 뜬다)
     if (R.guardian && !st.owns(R.guardian)) st.obtainMount(R.guardian);
+    // 경험치는 정화·합류 연출 다음에 (진화 안내가 정화 장면보다 먼저 뜨지 않게)
+    st.addExp(b.exp);
     this.time.delayedCall(2600, () => {
       this.player.locked = false;
       audio.startMusic('calm');
@@ -297,6 +323,7 @@ export class WorldScene extends Phaser.Scene {
     this.player.locked = true;
     const time = (this.time.now - this.startTime) / 1000;
     const first = !st.data.stages[this.map.id]?.cleared;
+    this.firstClear = first;
     const exp = Math.round(this.map.clearExp * (first ? 1 : 0.5));
     const gold = 30 + this.map.tier * 20;
     const idx = STAGES.findIndex((s) => s.id === this.map.id);
@@ -521,6 +548,7 @@ export class WorldScene extends Phaser.Scene {
     audio.startMusic('boss');
     audio.play('boss');
     this.cameras.main.shake(500, 0.008);
+    if (!store.state.data.stats.bosses.includes(R.bossId)) this.story(`r${R.n}_boss`);
     overlayQueue.push({ type: 'boss', title: R.bossName, sub: R.n === 6 ? '모든 어둠의 근원' : `어둠에 물든 ${R.name}의 수호 영물` });
   }
 
@@ -599,6 +627,8 @@ export class WorldScene extends Phaser.Scene {
   afterClear(goNext: boolean) {
     const next = STAGES[STAGES.findIndex((s) => s.id === this.map.id) + 1];
     this.scene.stop('Hud');
+    // 마지막 구간을 처음 돌파: 종장 + 엔딩 크레디트
+    if (this.map.id === '6-6' && this.firstClear && STORY_ON && !store.state.storySeen('ending')) { this.scene.start('Ending'); return; }
     if (goNext && next) this.scene.restart({ stage: next.id });
     else this.scene.start('Map');
   }

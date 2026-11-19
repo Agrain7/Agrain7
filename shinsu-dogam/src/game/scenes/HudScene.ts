@@ -2,7 +2,7 @@
 // 좌하단 ←→, 우하단 파랑 소용돌이(공격)·빨강 소용돌이(기술)·연꽃(필살기)·위 화살표(점프). PC에서도 버튼을 누를 수 있다.
 import Phaser from 'phaser';
 import type { WorldScene } from './WorldScene.ts';
-import { txt, bar } from '../../ui/widgets.ts';
+import { txt, bar, card, fitInto } from '../../ui/widgets.ts';
 import { store } from '../ctx.ts';
 import { controls, type Btn } from '../controls.ts';
 import { MOUNTS } from '../../data/mounts.ts';
@@ -10,7 +10,7 @@ import { RANGED } from '../../data/beastSkills.ts';
 import type { MountId } from '../../data/types.ts';
 import { expToNext } from '../../systems/state.ts';
 import { GAME_W, GAME_H, COLORS, isTouchDevice } from '../config.ts';
-import { addCanvas, riderMeta } from '../textures.ts';
+import { addCanvas, riderMeta, ensurePortrait } from '../textures.ts';
 import { makeCanvas, cloudSwirl } from '../../art/paint.ts';
 import { audio } from '../../systems/audio.ts';
 
@@ -130,7 +130,10 @@ export class HudScene extends Phaser.Scene {
     this.world.events.on('hud-msg', onMsg);
     this.world.events.on('hud-title', onTitle);
     this.world.events.on('boss-hp', onBoss);
+    const onBark = (who: string, text: string) => this.bark(who, text);
+    this.world.events.on('hud-bark', onBark);
     this.events.once('shutdown', () => {
+      this.world.events.off('hud-bark', onBark);
       this.world.events.off('hud-msg', onMsg);
       this.world.events.off('hud-title', onTitle);
       this.world.events.off('boss-hp', onBoss);
@@ -271,6 +274,27 @@ export class HudScene extends Phaser.Scene {
       targets: t, alpha: 0, y: y - 20, delay: 2200, duration: 400,
       onComplete: () => { t.destroy(); this.msgs = this.msgs.filter((x) => x !== t); },
     });
+  }
+
+  /** 달리는 중 한마디: 위쪽 가운데 한지 띠 (월드는 멈추지 않음) */
+  bark(who: string, text: string) {
+    const w = 660, h = 66;
+    const c = this.add.container(GAME_W / 2 - w / 2, 96).setAlpha(0).setDepth(40);
+    c.add(card(this, 0, 0, w, h));
+    if (who === 'haram') {
+      const ring = this.add.graphics();
+      ring.fillStyle(0xfbf3e2, 1).fillCircle(40, h / 2, 27).lineStyle(3, 0xc9a24a, 1).strokeCircle(40, h / 2, 27);
+      c.add(ring);
+      if (this.textures.exists('ref_portrait')) c.add(this.add.image(40, h / 2, 'ref_portrait').setDisplaySize(50, 50));
+    } else {
+      const own = store.state.data.mounts[who as MountId];
+      c.add(fitInto(this.add.image(0, 0, ensurePortrait(this, who, own?.stage ?? 0, 'normal', own?.skin)), 42, h - 6, 70, 56, 1));
+    }
+    const name = who === 'haram' ? '하람' : MOUNTS[who as MountId]?.name ?? '';
+    c.add(txt(this, 86, 12, name, 14, '#b8322a', { title: true }));
+    c.add(txt(this, 86, 32, who === 'haram' ? text : `‘${text}’`, 18, who === 'haram' ? '#3a2a22' : '#24505e', { wordWrap: { width: w - 110, useAdvancedWrap: true }, maxLines: 1 }));
+    this.tweens.add({ targets: c, alpha: 1, y: 104, duration: 280, ease: 'Cubic.out' });
+    this.tweens.add({ targets: c, alpha: 0, y: 92, delay: 4200, duration: 420, onComplete: () => c.destroy() });
   }
 
   titleCard(title: string, sub: string) {

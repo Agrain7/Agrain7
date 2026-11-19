@@ -41,6 +41,13 @@ async function open(ctxOpts, url) {
 const world = (page, fn) => page.evaluate(`(() => { const w = window.__SD__.game.scene.getScene('World'); const s = window.__SD__.store.state; return (${fn})(w, s); })()`);
 const activeScenes = (page) => page.evaluate(() => window.__SD__.game.scene.getScenes(true).map((s) => s.scene.key));
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+/** 장면 안에 이 글자가 보이는가 (컨테이너 안까지) */
+const sceneHasText = (page, key, src) => page.evaluate(([k, s]) => {
+  const rx = new RegExp(s);
+  const walk = (list) => list.some((o) => (o.type === 'Text' && rx.test(o.text)) || (o.list && walk(o.list)));
+  const sc = window.__SD__.game.scene.getScene(k);
+  return !!sc && walk(sc.children.list);
+}, [key, src]);
 
 try {
   // ---------------- PC ----------------
@@ -49,13 +56,23 @@ try {
   check('타이틀 화면 표시', (await activeScenes(page)).includes('Title'));
   await page.screenshot({ path: `${OUT}/01_title.png` });
   await page.mouse.click(1050, 360); // 새 모험
-  await sleep(700);
-  await page.mouse.click(1170, 50); // 인트로 건너뛰기
+  await sleep(900);
+  const pro = { intro: (await activeScenes(page)).includes('Intro'), card: await sceneHasText(page, 'Intro', '빈 도감') };
+  check('서장 이야기 (장 제목 카드)', pro.intro && pro.card, JSON.stringify(pro));
+  await page.screenshot({ path: `${OUT}/01b_prologue.png` });
+  await page.mouse.click(1170, 50); // 서장 건너뛰기
   await sleep(1200);
   check('지도(스테이지 선택) 진입', (await activeScenes(page)).includes('Map'));
   await page.screenshot({ path: `${OUT}/02_map.png` });
   await page.keyboard.press('Enter');
   await sleep(1800);
+  const arrive = { card: await sceneHasText(page, 'Overlay', '달빛 아래의 첫 길동무'), sub: await sceneHasText(page, 'Overlay', '월하산맥 1-1'), paused: !(await activeScenes(page)).includes('World') };
+  check('1-1 도착 이야기 (월드 멈춤 + 장 제목)', arrive.card && arrive.sub && arrive.paused, JSON.stringify(arrive));
+  await page.screenshot({ path: `${OUT}/02b_arrive.png` });
+  await page.mouse.click(1170, 50); // 이야기 건너뛰기
+  await sleep(700);
+  const seen = await page.evaluate(() => window.__SD__.store.state.data.story.seen);
+  check('이야기 기록 저장 (서장·1-1 도착)', seen.includes('prologue') && seen.includes('r1_arrive'), seen.join(','));
   const sc = await activeScenes(page);
   check('1-1 월드 + HUD 실행', sc.includes('World') && sc.includes('Hud'), sc.join(','));
   const x0 = await world(page, (w) => w.player.x);
@@ -130,7 +147,11 @@ try {
   await sleep(1500);
   // 진화 + 청룡 비행 (데이터 조작으로 빠르게 확인)
   await world(page, (w, s) => { s.obtainMount('cheongryong'); return 1; });
-  await sleep(900);
+  await sleep(1200);
+  const meet = await sceneHasText(page, 'Overlay', '여의주');
+  check('영물 만남 이야기 (청룡 합류 전)', meet);
+  await page.mouse.click(1170, 50); // 이야기 건너뛰기
+  await sleep(700);
   await page.mouse.click(510, 610); // 획득 연출: 함께 달리기
   await sleep(600);
   await world(page, (w, s) => { s.data.mounts.cheongryong.level = 30; s.addItem('spirit_stone', 30); s.addItem('gold', 2000); s.evolve('cheongryong'); s.evolve('cheongryong'); w.player.rebuild(); return 1; });
