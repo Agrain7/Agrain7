@@ -387,7 +387,23 @@ export class WorldScene extends Phaser.Scene {
     this.scene.pause('Hud');
   }
 
+  /** 최근 프레임 간격 (화면 주사율 추정) */
+  private frameGaps: number[] = [];
+  /** 물리 단계 수를 화면 주사율에 맞춘다: 한 프레임에 물리 한 번 → 120Hz 화면에서도 매 프레임 고르게 움직임 */
+  private syncPhysicsRate() {
+    const raw = this.game.loop.rawDelta;
+    if (raw > 0 && raw < 50) this.frameGaps.push(raw);
+    if (this.frameGaps.length < 90) return;
+    const g = [...this.frameGaps].sort((a, b) => a - b);
+    this.frameGaps.length = 0;
+    const hz = 1000 / g[Math.floor(g.length / 2)];
+    const want = hz > 132 ? 144 : hz > 105 ? 120 : hz > 80 ? 90 : 60;
+    const world = this.physics.world;
+    if (world.fps !== want) world.setFPS(want);
+  }
+
   update(_t: number, dms: number) {
+    this.syncPhysicsRate();
     // 느린 기기에서도 타이머가 실제 시간과 비슷하게 흐르도록 (물리는 고정 간격으로 따로 계산)
     const dt = Math.min(dms, 100) / 1000;
     controls.update();
@@ -410,6 +426,9 @@ export class WorldScene extends Phaser.Scene {
     // 카메라: 진행 방향 쪽을 넓게
     this.camOffX = Phaser.Math.Linear(this.camOffX, -p.facing * 190, Math.min(1, dt * 2.8));
     this.cameras.main.setFollowOffset(this.camOffX, p.flying ? 0 : -40);
+    // 카메라 따라가기 정도를 시간 기준으로 (60Hz·120Hz 화면에서 똑같이 부드럽게)
+    const k = dt * 60;
+    this.cameras.main.setLerp(1 - Math.pow(1 - 0.12, k), 1 - Math.pow(1 - 0.14, k));
     this.bd.update(this.cameras.main.scrollX, this.cameras.main.scrollY, dt);
     this.fg.tilePositionX = this.cameras.main.scrollX * 1.3;
     // 이동 거리

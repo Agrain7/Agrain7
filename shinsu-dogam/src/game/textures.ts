@@ -9,6 +9,7 @@ import { makeCanvas } from '../art/paint.ts';
 import { readPixels, silhouette, tintedImage } from '../art/mountFrames.ts';
 import { rigJob, type RigJob, type RigResult } from '../art/rig.ts';
 import { rigFor } from '../data/mountRigs.ts';
+import { rigInWorker } from '../art/rigClient.ts';
 import { MOUNT_ART, artKey } from '../data/mountArt.ts';
 import { MONSTER_ART, monsterImageKey } from '../data/monsterArt.ts';
 import { COSMETICS } from '../data/cosmetics.ts';
@@ -203,15 +204,39 @@ export function ensureMount(scene: Phaser.Scene, mountId: string, stage: number,
 }
 
 /** 미리 만들어 두기: 프레임마다 몇 ms씩 나눠 계산해 끊김 없이 준비 */
+const mountInflight = new Set<string>();
 export function prewarmMount(scene: Phaser.Scene, mountId: string, stage: number, skin?: string, onDone?: () => void) {
   if (hasMount(scene, mountId, stage, skin)) { onDone?.(); return; }
   if (spriteSets.has(`mounts/${artKey(mountId, stage)}`)) { ensureMount(scene, mountId, stage, skin); onDone?.(); return; }
+  const key = mountTexKey(mountId, stage, skin);
+  if (mountInflight.has(key)) return;
+  // 1) 작업자(다른 CPU 코어)에서 그린다 → 게임 화면은 멈추지 않는다
+  const ak = artKey(mountId, stage);
+  const info = MOUNT_ART[ak];
+  const img = scene.textures.get(mountImageKey(mountId, stage)).getSourceImage() as HTMLImageElement;
+  const tint = skin ? COSMETICS[skin]?.tint : undefined;
+  const req = rigInWorker(readPixels(img, info.w, info.h, tint), ak, info.motion, info.seat);
+  if (req) {
+    mountInflight.add(key);
+    req.then((res) => {
+      mountInflight.delete(key);
+      if (hasMount(scene, mountId, stage, skin)) { onDone?.(); return; } // 그 사이 바로 필요해서 이미 만들었음
+      if (res) { registerMount(scene, mountId, stage, skin, res); onDone?.(); }
+      else prewarmMountSliced(scene, mountId, stage, skin, onDone);
+    });
+    return;
+  }
+  prewarmMountSliced(scene, mountId, stage, skin, onDone);
+}
+
+/** 작업자를 못 쓸 때: 프레임마다 몇 ms씩 나눠 계산 */
+function prewarmMountSliced(scene: Phaser.Scene, mountId: string, stage: number, skin?: string, onDone?: () => void) {
   const job = mountJob(scene, mountId, stage, skin);
   const ev = scene.time.addEvent({
     delay: 16, loop: true,
     callback: () => {
       if (hasMount(scene, mountId, stage, skin)) { ev.remove(); onDone?.(); return; }
-      const res = job.step(5);
+      const res = job.step(4);
       if (res) { ev.remove(); registerMount(scene, mountId, stage, skin, res); onDone?.(); }
     },
   });
@@ -328,34 +353,62 @@ export function ensureMonster(scene: Phaser.Scene, id: string): string {
 }
 
 /** 부팅 때 몬스터 리깅을 나눠서 미리 계산 (progress: 0..1) */
+/** 몬스터 리깅을 작업자에서 (실패하면 null) */
+function monsterInWorker(scene: Phaser.Scene, id: string) {
+  const art = MONSTER_ART[id];
+  if (!art || !scene.textures.exists(monsterImageKey(id))) return null;
+  const img = scene.textures.get(monsterImageKey(id)).getSourceImage() as HTMLImageElement;
+  return rigInWorker(readPixels(img, art.w, art.h), art.rig, art.motion, [0.5, 0.5], art.frames);
+}
+
 export async function prewarmMonsters(scene: Phaser.Scene, progress?: (p: number) => void) {
   const ids = Object.keys(MONSTER_ART).filter((id) => !id.startsWith('boss_') && !spriteSets.has(`monsters/${id}`) && !scene.textures.exists(`mon_${id}`));
   let done = 0;
-  for (const id of ids) {
+  // 작업자로 한꺼번에 (로딩이 빨라짐)
+  const viaWorker = await Promise.all(ids.map(async (id) => {
+    const req = monsterInWorker(scene, id);
+    const res = req ? await req : null;
+    if (res && !scene.textures.exists(`mon_${id}`)) registerMonsterRig(scene, id, res);
+    progress?.(++done / ids.length);
+    return !!res;
+  }));
+  done = 0;
+  for (const [i, id] of ids.entries()) {
+    if (viaWorker[i]) continue;
     const job = monsterJob(scene, id);
-    if (!job) { done++; continue; }
+    if (!job) continue;
     await new Promise<void>((resolve) => {
       const tick = () => {
         const res = job.step(20);
-        progress?.((done + (res ? 1 : 0.5)) / ids.length);
         if (res) { registerMonsterRig(scene, id, res); resolve(); } else scene.time.delayedCall(1, tick);
       };
       tick();
     });
-    done++;
   }
 }
 
-/** 구간에 들어갈 때 보스를 미리 (프레임마다 몇 ms씩) */
+/** 구간에 들어갈 때 보스를 미리 (작업자, 안 되면 프레임마다 몇 ms씩) */
 export function prewarmMonster(scene: Phaser.Scene, id: string) {
   if (scene.textures.exists(`mon_${id}`) || spriteSets.has(`monsters/${id}`)) return;
+  const req = monsterInWorker(scene, id);
+  if (req) {
+    req.then((res) => {
+      if (scene.textures.exists(`mon_${id}`)) return;
+      if (res) registerMonsterRig(scene, id, res);
+      else prewarmMonsterSliced(scene, id);
+    });
+    return;
+  }
+  prewarmMonsterSliced(scene, id);
+}
+function prewarmMonsterSliced(scene: Phaser.Scene, id: string) {
   const job = monsterJob(scene, id);
   if (!job) return;
   const ev = scene.time.addEvent({
     delay: 16, loop: true,
     callback: () => {
       if (scene.textures.exists(`mon_${id}`)) { ev.remove(); return; }
-      const res = job.step(5);
+      const res = job.step(4);
       if (res) { ev.remove(); registerMonsterRig(scene, id, res); }
     },
   });

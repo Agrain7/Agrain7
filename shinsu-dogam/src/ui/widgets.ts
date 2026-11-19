@@ -3,14 +3,25 @@ import Phaser from 'phaser';
 import { FONT_TITLE, FONT_UI, COLORS } from '../game/config.ts';
 import { audio } from '../systems/audio.ts';
 
+/** 글꼴 측정값 캐시: Phaser 는 글자 객체를 만들 때마다 글꼴 높이를 픽셀로 재서 느리다 (휴대폰에서 데미지 숫자마다 멈칫).
+ *  같은 글꼴·크기·굵기·테두리는 한 번만 재고 그 값을 넘긴다. */
+const metricsCache = new Map<string, { ascent: number; descent: number; fontSize: number }>();
 export function txt(scene: Phaser.Scene, x: number, y: number, s: string, size = 20, color: string = COLORS.text, opts: Partial<Phaser.Types.GameObjects.Text.TextStyle> & { title?: boolean } = {}) {
   const { title, ...rest } = opts;
+  const family = title ? FONT_TITLE : FONT_UI;
+  const mkey = `${family}|${size}|${rest.fontStyle ?? ''}|${rest.strokeThickness ?? 0}|${JSON.stringify(rest.padding ?? '')}`;
+  const cached = metricsCache.get(mkey);
   const t = scene.add.text(x, y, s, {
-    fontFamily: title ? FONT_TITLE : FONT_UI,
+    fontFamily: family,
     fontSize: `${size}px`,
     color,
     ...rest,
+    ...(cached ? { metrics: cached } : {}),
   });
+  if (!cached) {
+    const m = t.getTextMetrics();
+    if (m && m.fontSize > 0) metricsCache.set(mkey, { ascent: m.ascent, descent: m.descent, fontSize: m.fontSize });
+  }
   t.setResolution(Math.min(2, window.devicePixelRatio || 1));
   return t;
 }

@@ -22,6 +22,11 @@ export function rng(seed: number): () => number {
 }
 
 export function makeCanvas(w: number, h: number): [HTMLCanvasElement, Ctx] {
+  // 작업자(Web Worker) 안에서는 OffscreenCanvas (리깅 프레임을 메인 스레드 밖에서 그릴 때)
+  if (typeof document === 'undefined') {
+    const oc = new OffscreenCanvas(Math.max(1, Math.ceil(w)), Math.max(1, Math.ceil(h)));
+    return [oc as unknown as HTMLCanvasElement, oc.getContext('2d') as unknown as Ctx];
+  }
   const c = document.createElement('canvas');
   c.width = Math.max(1, Math.ceil(w));
   c.height = Math.max(1, Math.ceil(h));

@@ -53,9 +53,19 @@ export class Combat {
     const r = this.scene.add.image(x, y, key).setScale(0.1).setDepth(12).setBlendMode(Phaser.BlendModes.ADD);
     this.scene.tweens.add({ targets: r, scale: toScale, alpha: 0, duration: dur, onComplete: () => r.destroy() });
   }
+  /** 떠오르는 숫자·글자: 글자 객체를 다시 쓴다 (매번 새로 만들면 휴대폰에서 멈칫) */
+  private floatPool = new Map<number, Phaser.GameObjects.Text[]>();
   floatText(x: number, y: number, s: string, color = '#fff3a0', size = 22) {
-    const t = txt(this.scene, x, y, s, size, color, { stroke: '#1d1a2b', strokeThickness: 5, fontStyle: 'bold' }).setOrigin(0.5).setDepth(30);
-    this.scene.tweens.add({ targets: t, y: y - 46, alpha: 0, duration: 800, ease: 'Cubic.out', onComplete: () => t.destroy() });
+    const pool = this.floatPool.get(size) ?? [];
+    this.floatPool.set(size, pool);
+    let t = pool.pop();
+    if (t && t.active) {
+      t.setText(s).setColor(color).setPosition(x, y).setAlpha(1).setVisible(true);
+    } else {
+      t = txt(this.scene, x, y, s, size, color, { stroke: '#1d1a2b', strokeThickness: 5, fontStyle: 'bold' }).setOrigin(0.5).setDepth(30);
+    }
+    const tt = t;
+    this.scene.tweens.add({ targets: tt, y: y - 46, alpha: 0, duration: 800, ease: 'Cubic.out', onComplete: () => { tt.setVisible(false); if (pool.length < 24) pool.push(tt); else tt.destroy(); } });
   }
   alert(m: Monster) {
     const t = txt(this.scene, m.x, m.body.top - 40, '!', 34, '#ff5a3a', { stroke: '#1d1a2b', strokeThickness: 6, fontStyle: 'bold' }).setOrigin(0.5).setDepth(30);

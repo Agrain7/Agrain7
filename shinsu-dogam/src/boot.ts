@@ -19,6 +19,8 @@ const game = new Phaser.Game({
   width: GAME_W,
   height: GAME_H,
   backgroundColor: '#14121d',
+  // 물리 단계 수는 월드가 화면 주사율(60·90·120·144Hz)에 맞춘다 (WorldScene.syncPhysicsRate).
+  // 60Hz 고정 물리는 120Hz 화면(갤럭시 폴드 커버·S 시리즈·아이폰 Pro 등)에서 영물이 한 프레임 걸러 움직여 끊겨 보였다.
   physics: { default: 'arcade', arcade: { gravity: { x: 0, y: 0 }, debug: false } },
   scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
   input: { activePointers: 4 },
