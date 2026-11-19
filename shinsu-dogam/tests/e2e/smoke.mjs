@@ -217,6 +217,21 @@ try {
   const touchVisible = await m.page.evaluate(() => window.__SD__.game.scene.getScene('Hud').showBtns);
   check('모바일 터치 버튼 표시', touchVisible === true);
   await m.page.screenshot({ path: `${OUT}/08_mobile.png` });
+  // 영물 목록: 손가락으로 끌어 9마리 모두(마지막 해태·봉황까지) 닿고, 끈 뒤 바로 다른 탭이 눌림
+  await world(m.page, (w, s) => { const now = Date.now(); for (const id of ['wolf', 'hawk', 'cheongryong', 'jujak', 'baekho', 'hyeonmu', 'girin', 'haetae', 'bonghwang']) if (!s.data.mounts[id]) s.data.mounts[id] = { id, level: 5, exp: 0, stage: 2, obtainedAt: now, history: [{ stage: 0, at: now, level: 1 }] }; s.data.activeMount = 'wolf'; w.openMenu('stable'); return 1; });
+  await sleep(1200);
+  const dA = P(160, 600), dB = P(160, 140);
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: dA.x, y: dA.y, id: 2 }] });
+  for (let i = 1; i <= 10; i++) { await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: dA.x, y: dA.y + ((dB.y - dA.y) * i) / 10, id: 2 }] }); await sleep(20); }
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+  await sleep(900);
+  const lst = await m.page.evaluate(() => { const a = window.__SD__.game.scene.getScene('Menu').areas.get('stable:list'); return { pos: Math.round(a.pos), max: Math.round(a.max), stillWolf: window.__SD__.game.scene.getScene('Menu').selMount === 'wolf' }; });
+  const lastRow = P(160, 96 + 34 + 8 * 98 + 45 - lst.pos); // 봉황 줄 (목록 9번째)
+  await m.page.touchscreen.tap(lastRow.x, lastRow.y);
+  await sleep(700);
+  const picked = await m.page.evaluate(() => window.__SD__.game.scene.getScene('Menu').selMount);
+  check('영물 목록 끌어 넘기기 → 봉황까지 닿음', lst.max > 0 && lst.pos >= lst.max - 2 && lst.stillWolf && picked === 'bonghwang', JSON.stringify({ ...lst, picked }));
+  await m.page.screenshot({ path: `${OUT}/10_mobile_stable_scrolled.png` });
   check('모바일 실행 중 오류 없음', m.errors.length === 0, m.errors.slice(0, 3).join(' | '));
   await m.ctx.close();
 } catch (e) {

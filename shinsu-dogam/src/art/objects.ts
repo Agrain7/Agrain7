@@ -831,3 +831,65 @@ export function paintOrnament(kind: 'knot' | 'jade' | 'bell'): HTMLCanvasElement
   ctx.fillStyle = '#e2b14c'; ctx.fillRect(15, 43, 10, 4);
   return c;
 }
+
+// ---------- 메뉴 UI (깔끔한 한지 + 단청 포인트) ----------
+/** 한지 카드: 둥근 모서리, 금빛 가는 테두리 + 안쪽 실선 (나인슬라이스 64×64, 테두리 18) */
+export function paintCard(kind: 'normal' | 'sel' | 'dark' | 'lock'): HTMLCanvasElement {
+  const [c, ctx] = makeCanvas(64, 64);
+  const fill = kind === 'dark' ? '#2b2438' : kind === 'lock' ? '#e7e0d2' : kind === 'sel' ? '#fff8e6' : '#fbf5e8';
+  const line = kind === 'sel' ? '#b8322a' : kind === 'dark' ? '#c9a24a' : '#c9a86a';
+  const rr = (x: number, y: number, w: number, h: number, r: number) => { ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r); ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath(); };
+  // 아래 그림자
+  rr(3, 5, 58, 57, 12); ctx.fillStyle = 'rgba(60,40,20,0.14)'; ctx.fill();
+  rr(2, 2, 58, 57, 12); ctx.fillStyle = fill; ctx.fill();
+  ctx.lineWidth = kind === 'sel' ? 3 : 2; ctx.strokeStyle = line; ctx.stroke();
+  rr(7, 7, 48, 47, 8); ctx.lineWidth = 1; ctx.strokeStyle = kind === 'dark' ? 'rgba(201,162,74,0.35)' : 'rgba(201,168,106,0.45)'; ctx.stroke();
+  if (kind !== 'dark') for (let i = 0; i < 60; i++) { ctx.fillStyle = `rgba(160,130,80,${0.03 + Math.random() * 0.04})`; ctx.fillRect(8 + Math.random() * 46, 8 + Math.random() * 46, 1 + Math.random() * 2, 1); }
+  return c;
+}
+
+/** 단청 띠 (가로 반복 128×22): 녹청 바탕에 붉은 마름모·금빛 꽃 무늬 */
+export function paintDancheong(): HTMLCanvasElement {
+  const [c, ctx] = makeCanvas(128, 22);
+  ctx.fillStyle = '#2f7f74'; ctx.fillRect(0, 0, 128, 22);
+  ctx.fillStyle = '#1f3d6b'; ctx.fillRect(0, 0, 128, 4); ctx.fillRect(0, 18, 128, 4);
+  ctx.fillStyle = '#e2b14c'; ctx.fillRect(0, 4, 128, 1.5); ctx.fillRect(0, 16.5, 128, 1.5);
+  for (const x of [16, 48, 80, 112]) {
+    ctx.save(); ctx.translate(x, 11); ctx.rotate(Math.PI / 4);
+    ctx.fillStyle = '#c3352c'; ctx.fillRect(-4.5, -4.5, 9, 9);
+    ctx.restore();
+    circle(ctx, x, 11, 2.2, '#f6e2a8');
+  }
+  for (const x of [0, 32, 64, 96, 128]) {
+    for (let k = 0; k < 6; k++) { const a = (k / 6) * TAU; ellipse(ctx, x + Math.cos(a) * 3.5, 11 + Math.sin(a) * 3.5, 2.2, 1.4, a, '#f2c94c'); }
+    circle(ctx, x, 11, 1.8, '#c3352c');
+  }
+  return c;
+}
+
+/** 붉은 낙관 모양 닫기 단추 */
+export function paintSealButton(): HTMLCanvasElement {
+  const [c, ctx] = makeCanvas(64, 64);
+  ctx.save(); ctx.translate(32, 32); ctx.rotate(-0.08);
+  ctx.fillStyle = 'rgba(40,20,10,0.25)'; ctx.fillRect(-24, -22, 50, 50);
+  ctx.fillStyle = '#b8322a'; ctx.fillRect(-25, -25, 50, 50);
+  ctx.strokeStyle = '#f3dcc0'; ctx.lineWidth = 2; ctx.strokeRect(-20, -20, 40, 40);
+  ctx.strokeStyle = '#fbeee0'; ctx.lineWidth = 4; ctx.lineCap = 'round';
+  ctx.beginPath(); ctx.moveTo(-9, -9); ctx.lineTo(9, 9); ctx.moveTo(9, -9); ctx.lineTo(-9, 9); ctx.stroke();
+  ctx.restore();
+  return c;
+}
+
+/** 탭: 선택 안 됨 (옅은 먹선 테두리 한지) */
+export function paintTab(active: boolean): HTMLCanvasElement {
+  const [c, ctx] = makeCanvas(96, 44);
+  const rr = (x: number, y: number, w: number, h: number, r: number) => { ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r); ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath(); };
+  if (active) {
+    const g = ctx.createLinearGradient(0, 0, 0, 44); g.addColorStop(0, '#c8412f'); g.addColorStop(1, '#8e2219');
+    rr(2, 2, 92, 40, 20); ctx.fillStyle = g; ctx.fill(); ctx.strokeStyle = '#e2b14c'; ctx.lineWidth = 2; ctx.stroke();
+    ctx.strokeStyle = 'rgba(255,230,180,0.35)'; ctx.lineWidth = 1; rr(6, 6, 84, 32, 16); ctx.stroke();
+  } else {
+    rr(2, 2, 92, 40, 20); ctx.fillStyle = 'rgba(255,250,238,0.10)'; ctx.fill(); ctx.strokeStyle = 'rgba(226,177,76,0.55)'; ctx.lineWidth = 1.5; ctx.stroke();
+  }
+  return c;
+}

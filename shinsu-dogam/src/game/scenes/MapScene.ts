@@ -1,12 +1,12 @@
 import Phaser from 'phaser';
 import { Backdrop } from '../world/Backdrop.ts';
-import { txt, panel, button, bar, toast } from '../../ui/widgets.ts';
+import { txt, panel, button, bar, toast, card, fitInto, sectionTitle, tap, resetScrolls } from '../../ui/widgets.ts';
+import { ScrollArea } from '../../ui/scroll.ts';
 import { store } from '../ctx.ts';
 import { STAGES } from '../../data/maps/wolha.ts';
 import { REGIONS, regionOf } from '../../data/regions.ts';
 import * as L from '../../systems/live.ts';
 import { MOUNTS } from '../../data/mounts.ts';
-import { MOUNT_ART, artKey } from '../../data/mountArt.ts';
 import { ensurePortrait } from '../textures.ts';
 import { expToNext } from '../../systems/state.ts';
 import { QUESTS } from '../../data/quests.ts';
@@ -26,6 +26,9 @@ export class MapScene extends Phaser.Scene {
   private region = 1;
   private regionLayer!: Phaser.GameObjects.Container;
   private lockLayer?: Phaser.GameObjects.Container;
+  /** 함께할 영물 고르는 가로 띠 (끌어 넘기기) */
+  private strip?: ScrollArea;
+  private stripPos?: number;
   private get regionStages() { return STAGES.filter((s) => s.id.startsWith(`${this.region}-`)); }
 
   constructor() {
@@ -39,6 +42,9 @@ export class MapScene extends Phaser.Scene {
     const st = store.state;
     st.updateQuests();
     this.nodes = [];
+    resetScrolls(this);
+    this.strip = undefined;
+    this.events.once('shutdown', () => { this.strip?.destroy(); this.strip = undefined; });
     // 처음 진입: 아직 돌파 안 한 첫 구간이 있는 지역
     const firstOpen = STAGES.findIndex((s) => !st.data.stages[s.id]?.cleared);
     let selId = STAGES[firstOpen === -1 ? STAGES.length - 1 : firstOpen].id;
@@ -205,40 +211,56 @@ export class MapScene extends Phaser.Scene {
   private drawMount() {
     const st = store.state;
     this.mountBox.removeAll(true);
-    const x0 = 810, y0 = 70;
-    this.mountBox.add(panel(this, x0, y0, 440, 520));
-    this.mountBox.add(txt(this, x0 + 30, y0 + 22, '함께할 영물', 24, COLORS.text, { title: true }));
+    if (this.strip) { this.stripPos = this.strip.pos; this.strip.destroy(); this.strip = undefined; }
+    const x0 = 810, y0 = 70, bw = 440;
+    this.mountBox.add(panel(this, x0, y0, bw, 520));
+    this.mountBox.add(sectionTitle(this, x0 + 44, y0 + 20, '함께할 영물', 24));
     const owned = st.rideableMounts();
     const m = st.active;
     const def = MOUNTS[m.id];
-    const info = MOUNT_ART[artKey(m.id, m.stage)];
-    const key = ensurePortrait(this, m.id, m.stage, 'normal', m.skin);
-    const img = this.add.image(x0 + 220, y0 + 250, key).setOrigin(0.5, 1);
-    img.setScale(Math.min(1.6, 300 / info.w, 180 / info.h));
+    // 큰 그림: 한지 카드 안에 맞춰 (튀어나오지 않게)
+    this.mountBox.add(card(this, x0 + 24, y0 + 60, bw - 48, 198));
+    const g = this.add.graphics();
+    g.fillStyle(0xf3e2bd, 0.75).fillCircle(x0 + bw / 2, y0 + 150, 78);
+    g.fillStyle(0xd9c39a, 0.35).fillEllipse(x0 + bw / 2, y0 + 246, 250, 18);
+    this.mountBox.add(g);
+    const img = fitInto(this.add.image(0, 0, ensurePortrait(this, m.id, m.stage, 'normal', m.skin)), x0 + bw / 2, y0 + 250, bw - 90, 176, 1.6);
     this.tweens.add({ targets: img, y: img.y - 4, yoyo: true, repeat: -1, duration: 1400, ease: 'Sine.inOut' });
     this.mountBox.add(img);
-    this.mountBox.add(txt(this, x0 + 220, y0 + 268, `${def.name} (${def.hanja})`, 26, COLORS.text, { title: true }).setOrigin(0.5, 0));
-    this.mountBox.add(txt(this, x0 + 220, y0 + 304, `${def.title} · ${def.stages[m.stage].name}`, 17, '#7a5a3a').setOrigin(0.5, 0));
-    this.mountBox.add(txt(this, x0 + 40, y0 + 340, `Lv.${m.level}`, 22, COLORS.text, { title: true }));
-    const b = bar(this, x0 + 120, y0 + 346, 280, 16, COLORS.exp);
+    this.mountBox.add(txt(this, x0 + bw / 2, y0 + 266, `${def.name} ${def.hanja}`, 24, COLORS.text, { title: true }).setOrigin(0.5, 0));
+    this.mountBox.add(txt(this, x0 + bw / 2, y0 + 298, `${def.title} · ${def.stages[m.stage].name}`, 15, '#7a5a3a').setOrigin(0.5, 0));
+    this.mountBox.add(txt(this, x0 + 36, y0 + 324, `Lv.${m.level}`, 20, COLORS.text, { title: true }));
+    const b = bar(this, x0 + 110, y0 + 330, 290, 14, COLORS.exp);
     b.set(m.exp / expToNext(m.level));
     this.mountBox.add(b.g);
     const s = st.stats(m.id);
-    this.mountBox.add(txt(this, x0 + 40, y0 + 378, `체력 ${s.maxHp}   공격 ${s.atk}   방어 ${s.def}`, 17, COLORS.text));
-    this.mountBox.add(txt(this, x0 + 40, y0 + 406, def.stages[m.stage].abilities.join(' · '), 15, '#5a4a3a', { wordWrap: { width: 370 } }));
-    if (owned.length > 1) {
-      const idx = owned.findIndex((o) => o.id === m.id);
-      const sw = (d: number) => {
-        const n = owned[(idx + d + owned.length) % owned.length];
-        st.setActive(n.id);
+    this.mountBox.add(txt(this, x0 + 36, y0 + 354, `체력 ${s.maxHp} · 공격 ${s.atk} · 방어 ${s.def}`, 15, COLORS.text));
+    this.mountBox.add(txt(this, x0 + 36, y0 + 376, def.stages[m.stage].abilities.join(' · '), 13, '#2f7f74', { wordWrap: { width: bw - 72 }, maxLines: 1 }));
+    // 고르기 띠: 탈 수 있는 영물 모두 (손가락으로 좌우로 끌기, 눌러서 탑승)
+    const TW = 84, GAP = 8;
+    const strip = new ScrollArea(this, x0 + 24, y0 + 402, bw - 48, 70, { horizontal: true, start: this.stripPos ?? 0 });
+    this.strip = strip;
+    owned.forEach((o, i) => {
+      const x = i * (TW + GAP);
+      const on = o.id === m.id;
+      const cd = card(this, x, 0, TW, 66, on ? 'sel' : 'normal');
+      tap(cd, () => {
+        if (st.data.activeMount === o.id) return;
+        st.setActive(o.id);
         st.save();
+        audio.play('select');
         this.drawMount();
-      };
-      this.mountBox.add(button(this, x0 + 40, y0 + 200, 54, 54, '◀', () => sw(-1)));
-      this.mountBox.add(button(this, x0 + 400, y0 + 200, 54, 54, '▶', () => sw(1)));
+      });
+      strip.add(cd);
+      strip.add(fitInto(this.add.image(0, 0, ensurePortrait(this, o.id, o.stage, 'normal', o.skin)), x + TW / 2, 62, TW - 10, 58, 1));
+    });
+    strip.setContentSize(owned.length * (TW + GAP) - GAP);
+    if (this.stripPos === undefined) {
+      const idx = owned.findIndex((o) => o.id === m.id);
+      if (idx >= 0) strip.reveal(idx * (TW + GAP), TW);
     }
-    this.mountBox.add(txt(this, x0 + 220, y0 + 470, `보유 영물 ${owned.length} / 9`, 16, '#7a5a3a').setOrigin(0.5));
-    this.mountBox.add(button(this, x0 + 220, y0 + 500, 200, 40, '영물 관리 · 진화', () => this.openMenu('stable'), 'normal', 17));
+    this.mountBox.add(txt(this, x0 + 36, y0 + 488, `보유 ${st.ownedMounts().length} / ${Object.keys(MOUNTS).length}${owned.length > 3 ? ' · 끌어서 넘기기' : ''}`, 13, '#7a5a3a'));
+    this.mountBox.add(button(this, x0 + bw - 120, y0 + 494, 184, 40, '영물 관리 · 진화', () => this.openMenu('stable'), 'normal', 16));
   }
 
   private start() {

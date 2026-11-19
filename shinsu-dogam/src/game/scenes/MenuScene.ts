@@ -1,9 +1,10 @@
-// 메뉴: 영물 / 도감 / 퀘스트 / 소지품 / 상점 / 설정
+// 메뉴: 영물 / 도감 / 일일 / 수행록 / 원정 / 퀘스트 / 소지품 / 상점 / 설정
+// 화면 구성: 한지 패널 + 알약 탭 + 단청 띠. 긴 목록은 모두 손가락으로 끌어 넘기는 목록(ScrollArea)이라 칸 밖으로 튀어나오지 않는다.
 import Phaser from 'phaser';
-import { txt, panel, button, bar, toast, confirmBox } from '../../ui/widgets.ts';
+import { txt, panel, button, bar, toast, confirmBox, card, fitInto, sectionTitle, tap, pill, setScrollsHidden, resetScrolls, type Pill } from '../../ui/widgets.ts';
+import { ScrollArea, type ScrollOpts } from '../../ui/scroll.ts';
 import { store } from '../ctx.ts';
 import { MOUNTS, MOUNT_ORDER, SKILLS } from '../../data/mounts.ts';
-import { MOUNT_ART, artKey } from '../../data/mountArt.ts';
 import { ITEMS } from '../../data/items.ts';
 import { QUESTS } from '../../data/quests.ts';
 import { PRODUCTS } from '../../data/products.ts';
@@ -25,18 +26,27 @@ import type { WorldScene } from './WorldScene.ts';
 type Tab = 'stable' | 'codex' | 'daily' | 'pass' | 'expedition' | 'quests' | 'inventory' | 'shop' | 'settings';
 const TABS: [Tab, string][] = [['stable', '영물'], ['codex', '도감'], ['daily', '일일'], ['pass', '수행록'], ['expedition', '원정'], ['quests', '퀘스트'], ['inventory', '소지품'], ['shop', '상점'], ['settings', '설정']];
 const X0 = 50, Y0 = 34, W = GAME_W - 100, H = GAME_H - 68;
+/** 탭 가운데 x (e2e 테스트도 이 위치를 누른다: X0 + 76 + i × 112, y = Y0 + 40) */
+const tabX = (i: number) => X0 + 76 + i * 112;
+/** 내용이 시작하는 높이 (탭 + 단청 띠 아래) */
+const TOP = Y0 + 92;
+const INK = '#3a2a22', SUB = '#7a5a3a', SOFT = '#5a4a3a', RED = '#b8322a', JADE = '#2f7f74';
 
 export class MenuScene extends Phaser.Scene {
   private tab: Tab = 'stable';
   private from = 'Map';
   private content!: Phaser.GameObjects.Container;
-  private tabBtns: Phaser.GameObjects.Container[] = [];
+  private tabBtns: Pill[] = [];
   private selMount: MountId = 'wolf';
   private codexSel: MountId | null = null;
   private shopCat: ProductCategory = 'skin';
-  private scrollY = 0;
-  private passPage = 0;
   private dots!: Phaser.GameObjects.Container;
+  /** 이번 화면의 끌어 넘기는 목록들 (다시 그릴 때 위치를 기억했다가 이어서) */
+  private areas = new Map<string, ScrollArea>();
+  private keep: Record<string, number> = {};
+  /** 1초마다 갱신할 것 (원정 남은 시간) — 목록을 다시 만들지 않아 끌던 손가락이 끊기지 않게 */
+  private ticks: (() => boolean)[] = [];
+  private dayKey = '';
 
   constructor() {
     super('Menu');
@@ -47,51 +57,60 @@ export class MenuScene extends Phaser.Scene {
     this.from = data.from ?? 'Map';
     this.selMount = store.state.data.activeMount;
     this.codexSel = null;
-    this.scrollY = 0;
+    this.keep = {};
+    this.areas = new Map();
   }
 
   create() {
     // 플레이 중 HUD(월드가 맨 위로 올려 둠) 위에 그려지도록 — 연출(Overlay)만 더 위
     this.scene.bringToTop();
     if (this.scene.get('Overlay')) this.scene.bringToTop('Overlay');
+    resetScrolls(this);
+    this.events.once('shutdown', () => { for (const a of this.areas.values()) a.destroy(); this.areas.clear(); });
     this.add.rectangle(0, 0, GAME_W, GAME_H, 0x0b0912, 0.6).setOrigin(0).setInteractive();
     panel(this, X0, Y0, W, H);
-    this.tabBtns = TABS.map(([t, label], i) => {
-      const b = button(this, X0 + 76 + i * 112, Y0 + 40, 104, 46, label, () => this.switchTab(t), t === this.tab ? 'primary' : 'normal', 17);
-      return b;
-    });
-    button(this, X0 + W - 62, Y0 + 40, 108, 46, this.from === 'World' ? '계속하기' : '닫기', () => this.close(), 'primary', 17);
+    // 단청 띠 (탭 아래 처마선)
+    this.add.tileSprite(X0 + 18, Y0 + 70, W - 36, 22, 'ui_dancheong').setOrigin(0).setScale(1, 0.62);
+    this.tabBtns = TABS.map(([t, label], i) => pill(this, tabX(i), Y0 + 40, 104, label, t === this.tab, () => this.switchTab(t), 17));
+    // 닫기: 붉은 낙관 (플레이 중이면 계속하기)
+    const seal = this.add.image(X0 + W - 46, Y0 + 40, 'ui_seal').setScale(0.82);
+    tap(seal, () => { audio.play('select'); this.close(); });
+    seal.on('pointerover', () => seal.setScale(0.88));
+    seal.on('pointerout', () => seal.setScale(0.82));
+    if (this.from === 'World') {
+      // 플레이 중: 낙관 = 계속하기, 옆의 작은 단추 = 지도로 나가기
+      button(this, X0 + W - 112, Y0 + 40, 76, 36, '지도로', () => {
+        confirmBox(this, '이 구간을 그만두고 지도로 나갈까요?\n(획득한 경험치·아이템은 저장됩니다)', () => {
+          store.state.save();
+          this.scene.stop('Hud');
+          this.scene.stop('World');
+          this.scene.stop();
+          this.scene.start('Map');
+        });
+      }, 'normal', 14);
+    } else txt(this, X0 + W - 80, Y0 + 40, '닫기', 15, SUB, { title: true }).setOrigin(1, 0.5);
     // 빨간 점 (받을 보상)
     this.dots = this.add.container(0, 0).setDepth(5);
-    this.drawDots();
-    // 원정 남은 시간 갱신
-    this.time.addEvent({ delay: 1000, loop: true, callback: () => { if (this.tab === 'expedition' || this.tab === 'daily') this.render(); } });
-    if (this.from === 'World') button(this, X0 + W - 90, Y0 + H - 36, 160, 44, '지도로 나가기', () => {
-      confirmBox(this, '이 구간을 그만두고 지도로 나갈까요?\n(획득한 경험치·아이템은 저장됩니다)', () => {
-        store.state.save();
-        this.scene.stop('Hud');
-        this.scene.stop('World');
-        this.scene.stop();
-        this.scene.start('Map');
-      });
-    }, 'normal', 17);
+    // 원정 남은 시간·날짜 바뀜
+    this.dayKey = new Date().toDateString();
+    this.time.addEvent({ delay: 1000, loop: true, callback: () => {
+      let again = false;
+      for (const f of this.ticks) again = f() || again;
+      const dk = new Date().toDateString();
+      if (dk !== this.dayKey) { this.dayKey = dk; again = true; }
+      if (again) this.render();
+    } });
     this.content = this.add.container(0, 0);
     this.input.keyboard?.on('keydown-ESC', () => this.close());
-    this.input.on('wheel', (_p: unknown, _o: unknown, _dx: number, dy: number) => {
-      if (this.tab === 'shop' || this.tab === 'quests' || this.tab === 'codex') {
-        this.scrollY = Phaser.Math.Clamp(this.scrollY + dy * 0.5, 0, 900);
-        this.render();
-      }
-    });
     if (this.tab === 'shop') analytics.track('shop_view', { from: this.from });
     this.render();
   }
 
   private switchTab(t: Tab) {
+    if (t === this.tab && !this.codexSel) return;
     this.tab = t;
-    this.scrollY = 0;
     this.codexSel = null;
-    TABS.forEach(([tt], i) => this.tabBtns[i].list[0] && (this.tabBtns[i].list[0] as Phaser.GameObjects.NineSlice).setTexture(tt === t ? 'ui_btn_primary' : 'ui_btn'));
+    TABS.forEach(([tt], i) => this.tabBtns[i].setActive2(tt === t));
     if (t === 'shop') analytics.track('shop_view', { from: this.from });
     this.render();
   }
@@ -110,6 +129,9 @@ export class MenuScene extends Phaser.Scene {
   }
 
   private render() {
+    for (const [k, a] of this.areas) { this.keep[k] = a.pos; a.destroy(); }
+    this.areas.clear();
+    this.ticks = [];
     this.content.removeAll(true);
     const c = this.content;
     const st = store.state;
@@ -128,18 +150,42 @@ export class MenuScene extends Phaser.Scene {
     this.drawDots();
   }
 
-  private t(c: Phaser.GameObjects.Container, x: number, y: number, s: string, size = 18, color: string = COLORS.text, opts: Parameters<typeof txt>[6] = {}) {
+  /** 끌어 넘기는 목록 만들기 (탭·이름별로 위치 기억) */
+  private area(name: string, x: number, y: number, w: number, h: number, opts: ScrollOpts = {}) {
+    const key = `${this.tab}:${name}`;
+    const remembered = this.keep[key];
+    const a = new ScrollArea(this, x, y, w, h, { ...opts, start: remembered ?? opts.start ?? 0 });
+    this.areas.set(key, a);
+    return { a, fresh: remembered === undefined };
+  }
+
+  private t(c: Phaser.GameObjects.Container, x: number, y: number, s: string, size = 18, color: string = INK, opts: Parameters<typeof txt>[6] = {}) {
     const o = txt(this, x, y, s, size, color, opts);
     c.add(o);
     return o;
   }
 
-  private portrait(c: Phaser.GameObjects.Container, id: MountId, stage: number, x: number, y: number, maxW: number, maxH: number, mode: 'normal' | 'silhouette' = 'normal', skin?: string) {
+  /** 영물 그림을 상자에 맞춰 넣기 (가운데 아래 기준, 튀어나오지 않게) */
+  private portrait(c: Phaser.GameObjects.Container, id: MountId, stage: number, cx: number, bottom: number, maxW: number, maxH: number, mode: 'normal' | 'silhouette' = 'normal', skin?: string) {
     const key = ensurePortrait(this, id, stage, mode, skin);
-    const info = MOUNT_ART[artKey(id, stage)];
-    const img = this.add.image(x, y, key).setOrigin(0.5, 1).setScale(Math.min(2, maxW / info.w, maxH / info.h));
+    const img = fitInto(this.add.image(0, 0, key), cx, bottom, maxW, maxH, 2);
     c.add(img);
     return img;
+  }
+
+  /** 작은 표찰 (탑승·원정·한정 등) */
+  private tag(c: Phaser.GameObjects.Container, x: number, y: number, s: string, color = 0xb8322a) {
+    const t = txt(this, x, y, s, 12, '#fff6e4', { title: true }).setOrigin(1, 0);
+    const g = this.add.graphics();
+    g.fillStyle(color, 1);
+    g.fillRoundedRect(x - t.width - 14, y - 3, t.width + 14, t.height + 6, 8);
+    t.setX(x - 7);
+    c.add([g, t]);
+    return t;
+  }
+
+  private title(c: Phaser.GameObjects.Container, s: string, sub?: string, x = X0 + 44, y = TOP) {
+    c.add(sectionTitle(this, x, y, s, 28, sub));
   }
 
   // ---------------- 영물 관리 ----------------
@@ -147,48 +193,87 @@ export class MenuScene extends Phaser.Scene {
     const st = store.state;
     const owned = st.ownedMounts();
     if (!st.owns(this.selMount)) this.selMount = st.data.activeMount;
-    // 왼쪽 목록
+    // 왼쪽: 보유 영물 목록 (끌어 넘기기)
+    const ROW = 98;
+    const { a: list, fresh } = this.area('list', X0 + 26, Y0 + 96, 258, H - 118);
     owned.forEach((m, i) => {
-      const y = Y0 + 100 + i * 88;
+      const y = i * ROW;
       const sel = m.id === this.selMount;
-      const bg = this.add.rectangle(X0 + 30, y, 230, 80, sel ? 0xe9d5a8 : 0xf6ecd6).setOrigin(0).setStrokeStyle(2, sel ? 0xc3352c : 0xb89466).setInteractive({ useHandCursor: true });
-      bg.on('pointerup', () => { this.selMount = m.id; audio.play('select'); this.render(); });
-      c.add(bg);
-      this.portrait(c, m.id, m.stage, X0 + 80, y + 74, 90, 66, 'normal', m.skin);
-      this.t(c, X0 + 132, y + 12, MOUNTS[m.id].name, 20, COLORS.text, { title: true });
-      this.t(c, X0 + 132, y + 42, `Lv.${m.level} · ${MOUNTS[m.id].stages[m.stage].name}`, 15, '#5a4a3a');
-      if (m.id === st.data.activeMount) this.t(c, X0 + 220, y + 6, '탑승', 13, '#c3352c');
+      const cd = card(this, 0, y, 250, 90, sel ? 'sel' : 'normal');
+      tap(cd, () => { if (this.selMount === m.id) return; this.selMount = m.id; audio.play('select'); this.render(); });
+      list.add(cd);
+      this.portrait(list.content, m.id, m.stage, 54, y + 84, 92, 74, 'normal', m.skin);
+      this.t(list.content, 106, y + 16, MOUNTS[m.id].name, 20, INK, { title: true });
+      this.t(list.content, 106, y + 48, `Lv.${m.level} · ${MOUNTS[m.id].stages[m.stage].name}`, 14, SOFT);
+      if (m.id === st.data.activeMount) this.tag(list.content, 240, y + 10, '탑승');
+      else if (st.data.expeditions[m.id]) this.tag(list.content, 240, y + 10, '원정', 0x5a4a7a);
     });
-    this.t(c, X0 + 30, Y0 + 110 + owned.length * 88, `보유 ${owned.length}/9 · 나머지는 도감에서 확인`, 14, '#7a5a3a');
-    // 상세
+    this.t(list.content, 6, owned.length * ROW + 2, `보유 ${owned.length} / ${MOUNT_ORDER.length} · 모두 보기는 도감`, 13, SUB);
+    list.setContentSize(owned.length * ROW + 26);
+    const idx = owned.findIndex((m) => m.id === this.selMount);
+    if (fresh && idx >= 0) list.reveal(idx * ROW, 90);
+
+    // 가운데: 상세
     const m = st.data.mounts[this.selMount]!;
     const def = MOUNTS[m.id];
     const sd = def.stages[m.stage];
-    const dx = X0 + 290;
-    this.portrait(c, m.id, m.stage, dx + 200, Y0 + 330, 360, 230, 'normal', m.skin);
-    this.t(c, dx + 20, Y0 + 92, `${def.name} ${def.hanja}`, 30, COLORS.text, { title: true });
-    this.t(c, dx + 20, Y0 + 132, `${def.title} · ${def.element} 속성 · ${sd.name}`, 16, '#7a5a3a');
-    this.t(c, dx + 20, Y0 + 350, `Lv.${m.level}`, 22, COLORS.text, { title: true });
-    const eb = bar(this, dx + 96, Y0 + 356, 280, 14, COLORS.exp);
+    const dx = X0 + 306, dw = 476;
+    this.t(c, dx, TOP - 4, `${def.name} ${def.hanja}`, 30, INK, { title: true });
+    this.t(c, dx, TOP + 38, `${def.title} · ${def.element} 속성 · ${sd.name}`, 15, SUB);
+    c.add(card(this, dx, Y0 + 160, dw, 228));
+    const g = this.add.graphics();
+    g.fillStyle(0xf3e2bd, 0.75).fillCircle(dx + dw / 2, Y0 + 262, 88);
+    g.fillStyle(0xd9c39a, 0.35).fillEllipse(dx + dw / 2, Y0 + 372, 300, 22);
+    c.add(g);
+    this.portrait(c, m.id, m.stage, dx + dw / 2, Y0 + 378, dw - 50, 198, 'normal', m.skin);
+    this.t(c, dx, Y0 + 402, `Lv.${m.level}`, 22, INK, { title: true });
+    const eb = bar(this, dx + 82, Y0 + 409, 290, 14, COLORS.exp);
     eb.set(m.exp / expToNext(m.level));
     c.add(eb.g);
-    this.t(c, dx + 390, Y0 + 352, `${m.exp}/${expToNext(m.level)}`, 14, '#5a4a3a');
+    this.t(c, dx + 384, Y0 + 405, `${m.exp} / ${expToNext(m.level)}`, 14, SOFT);
     const s = st.stats(m.id);
-    this.t(c, dx + 20, Y0 + 384, `체력 ${s.maxHp}  ·  공격 ${s.atk}  ·  방어 ${s.def}`, 18);
-    this.t(c, dx + 20, Y0 + 414, `기본 공격 — ${SKILLS[sd.attack].name}: ${SKILLS[sd.attack].desc}`, 15, '#3a2a2a', { wordWrap: { width: 470 } });
-    this.t(c, dx + 20, Y0 + 446, `특수 기술 — ${SKILLS[sd.special].name}: ${SKILLS[sd.special].desc}`, 15, '#3a2a2a', { wordWrap: { width: 470 } });
-    this.t(c, dx + 20, Y0 + 496, `이동: ${sd.abilities.join(' · ')}`, 15, '#3a2a2a', { wordWrap: { width: 470 } });
-    // 오른쪽: 행동
-    const rx = X0 + 800;
-    if (m.id !== st.data.activeMount) c.add(button(this, rx + 150, Y0 + 110, 260, 52, st.data.expeditions[m.id] ? '원정 중 (원정 탭)' : '이 영물에 탑승', () => { if (!st.setActive(m.id)) { toast(this, '원정 중인 영물은 돌아온 뒤에 탈 수 있어요'); return; } st.save(); this.render(); }, 'primary'));
-    else this.t(c, rx + 150, Y0 + 110, '현재 탑승 중', 20, '#c3352c', { title: true }).setOrigin(0.5);
+    ([['체력', s.maxHp], ['공격', s.atk], ['방어', s.def]] as const).forEach(([k, v], i) => {
+      c.add(card(this, dx + i * 160, Y0 + 436, 150, 38));
+      this.t(c, dx + i * 160 + 75, Y0 + 455, `${k}  ${v}`, 16, INK, { title: true }).setOrigin(0.5);
+    });
+    let y = Y0 + 488;
+    for (const [label, sk] of [['기본 공격', SKILLS[sd.attack]], ['특수 기술', SKILLS[sd.special]]] as const) {
+      const h = this.t(c, dx, y, `${label} · ${sk.name}`, 15, RED, { title: true });
+      y += h.height + 2;
+      const d = this.t(c, dx, y, sk.desc, 14, SOFT, { wordWrap: { width: dw } });
+      y += d.height + 8;
+    }
+    this.t(c, dx, y, `이동  ${sd.abilities.join(' · ')}`, 14, JADE, { wordWrap: { width: dw } });
+
+    // 오른쪽: 탑승·진화·수련·꾸미기 (끌어 넘기기)
+    const RW = 336;
+    const { a: side } = this.area('side', X0 + 806, Y0 + 96, RW + 6, H - 118);
+    const sc = side.content;
+    let sy = 0;
+    if (m.id !== st.data.activeMount) {
+      const rb = button(this, RW / 2, sy + 28, RW, 54, st.data.expeditions[m.id] ? '원정 중 (원정 탭)' : '이 영물에 탑승', () => {
+        if (!st.setActive(m.id)) { toast(this, '원정 중인 영물은 돌아온 뒤에 탈 수 있어요'); return; }
+        st.save();
+        this.render();
+      }, 'primary', 19);
+      rb.setEnabled(!st.data.expeditions[m.id]);
+      sc.add(rb);
+    } else {
+      sc.add(card(this, 0, sy, RW, 56, 'sel'));
+      this.t(sc, RW / 2, sy + 28, '현재 탑승 중', 19, RED, { title: true }).setOrigin(0.5);
+    }
+    sy += 68;
     // 진화
     const ce = st.canEvolve(m.id);
     if (m.stage < 2) {
       const next = def.stages[m.stage + 1];
-      this.t(c, rx + 20, Y0 + 150, `다음 단계: ${next.name} (Lv.${next.minLevel})`, 18, COLORS.text, { title: true });
-      this.t(c, rx + 20, Y0 + 178, `필요: 영기석 ${next.evolveCost!.spiritStone} (보유 ${st.count('spirit_stone')}) · 금화 ${next.evolveCost!.gold} (보유 ${st.count('gold')})`, 14, '#5a4a3a', { wordWrap: { width: 300 } });
-      const eb2 = button(this, rx + 150, Y0 + 236, 260, 52, ce.ok ? '진화하기' : ce.reason === 'level' ? `Lv.${next.minLevel} 필요` : '재료 부족', () => {
+      sc.add(card(this, 0, sy, RW, 156));
+      this.t(sc, 16, sy + 14, `진화 · ${next.name}`, 19, INK, { title: true });
+      this.t(sc, RW - 16, sy + 18, `Lv.${next.minLevel}`, 15, m.level >= next.minLevel ? JADE : RED, { title: true }).setOrigin(1, 0);
+      const ss = st.count('spirit_stone') >= next.evolveCost!.spiritStone, gg = st.count('gold') >= next.evolveCost!.gold;
+      this.t(sc, 16, sy + 48, `영기석 ${next.evolveCost!.spiritStone}  (보유 ${st.count('spirit_stone')})`, 14, ss ? SOFT : RED);
+      this.t(sc, 16, sy + 70, `금화 ${next.evolveCost!.gold}  (보유 ${st.count('gold')})`, 14, gg ? SOFT : RED);
+      const eb2 = button(this, RW / 2, sy + 122, RW - 32, 46, ce.ok ? '진화하기' : ce.reason === 'level' ? `Lv.${next.minLevel} 필요` : '재료 부족', () => {
         if (st.evolve(m.id)) {
           st.save();
           overlayQueue.push({ type: 'evolve', mount: m.id, stage: m.stage });
@@ -196,72 +281,100 @@ export class MenuScene extends Phaser.Scene {
           this.scene.bringToTop('Overlay');
           this.render();
         }
-      }, 'primary');
+      }, 'primary', 18);
       eb2.setEnabled(ce.ok);
-      c.add(eb2);
-    } else this.t(c, rx + 20, Y0 + 160, '각성체 — 최고 단계에 도달했어요', 18, '#c3352c', { title: true });
+      sc.add(eb2);
+      sy += 168;
+    } else {
+      sc.add(card(this, 0, sy, RW, 60));
+      this.t(sc, RW / 2, sy + 30, '각성체 — 최고 단계', 18, RED, { title: true }).setOrigin(0.5);
+      sy += 72;
+    }
     // 수련
-    this.t(c, rx + 20, Y0 + 284, `영기석 수련: 1개당 경험치 ${STONE_EXP}`, 16, COLORS.text);
+    sc.add(card(this, 0, sy, RW, 118));
+    this.t(sc, 16, sy + 14, '영기석 수련', 19, INK, { title: true });
+    this.t(sc, RW - 16, sy + 18, `1개당 경험 ${STONE_EXP} · 보유 ${st.count('spirit_stone')}`, 13, SUB).setOrigin(1, 0);
     const tr = (n: number) => () => {
       const ups = st.train(m.id, n);
       audio.play(ups ? 'levelup' : 'coin');
       st.save();
       this.render();
     };
-    const b1 = button(this, rx + 80, Y0 + 330, 120, 46, '1개 사용', tr(1));
-    const b5 = button(this, rx + 220, Y0 + 330, 120, 46, '5개 사용', tr(5));
+    const b1 = button(this, RW / 2 - 78, sy + 78, 146, 44, '1개 사용', tr(1), 'normal', 17);
+    const b5 = button(this, RW / 2 + 78, sy + 78, 146, 44, '5개 사용', tr(5), 'normal', 17);
     b1.setEnabled(st.count('spirit_stone') >= 1);
     b5.setEnabled(st.count('spirit_stone') >= 5);
-    c.add([b1, b5]);
+    sc.add([b1, b5]);
+    sy += 130;
     // 스킨
     const skins = Object.values(COSMETICS).filter((x) => x.kind === 'skin' && x.mount === m.id && st.ownsCosmetic(x.id));
-    this.t(c, rx + 20, Y0 + 372, '스킨', 18, COLORS.text, { title: true });
-    if (!skins.length) this.t(c, rx + 20, Y0 + 400, '보유한 스킨이 없어요 (상점)', 14, '#7a5a3a');
+    const skRows = Math.max(1, Math.ceil(skins.length / 2));
+    sc.add(card(this, 0, sy, RW, 54 + skRows * 50));
+    this.t(sc, 16, sy + 14, '스킨', 19, INK, { title: true });
+    if (!skins.length) {
+      this.t(sc, 16, sy + 54, '보유한 스킨이 없어요', 14, SUB);
+      const go = button(this, RW - 70, sy + 62, 112, 36, '상점 보기', () => { this.shopCat = 'skin'; this.switchTab('shop'); }, 'normal', 14);
+      sc.add(go);
+    }
     skins.forEach((sk, i) => {
       const on = m.skin === sk.id;
-      c.add(button(this, rx + 85 + (i % 2) * 140, Y0 + 412 + Math.floor(i / 2) * 50, 130, 42, `${on ? '✓ ' : ''}${sk.name}`, () => { st.equip(sk.id); st.save(); this.render(); }, on ? 'primary' : 'normal', 15));
+      sc.add(button(this, 16 + 74 + (i % 2) * 156, sy + 72 + Math.floor(i / 2) * 50, 148, 42, `${on ? '✓ ' : ''}${sk.name}`, () => { st.equip(sk.id); st.save(); this.render(); }, on ? 'primary' : 'normal', 14));
     });
+    sy += 54 + skRows * 50 + 12;
     // 장식·의상
     const decos = Object.values(COSMETICS).filter((x) => (x.kind === 'decor' || x.kind === 'trail' || x.kind === 'outfit') && st.ownsCosmetic(x.id));
-    this.t(c, rx + 20, Y0 + 500, '장식 · 의상', 18, COLORS.text, { title: true });
+    const dRows = Math.max(1, Math.ceil(decos.length / 2));
+    sc.add(card(this, 0, sy, RW, 54 + dRows * 48));
+    this.t(sc, 16, sy + 14, '장식 · 의상', 19, INK, { title: true });
+    if (!decos.length) this.t(sc, 16, sy + 54, '보유한 장식이 없어요 (상점)', 14, SUB);
     decos.forEach((d, i) => {
       const on = st.data.cosmetics.outfit === d.id || st.data.cosmetics.decor.includes(d.id) || st.data.cosmetics.trail === d.id;
-      c.add(button(this, rx + 70 + (i % 3) * 110, Y0 + 540 + Math.floor(i / 3) * 44, 104, 38, `${on ? '✓' : ''}${d.name}`, () => {
+      sc.add(button(this, 16 + 74 + (i % 2) * 156, sy + 72 + Math.floor(i / 2) * 48, 148, 40, `${on ? '✓ ' : ''}${d.name}`, () => {
         st.equip(d.id);
         if (d.kind === 'outfit') ensureRider(this, d.id);
         st.save();
         this.render();
-      }, on ? 'primary' : 'normal', 12));
+      }, on ? 'primary' : 'normal', 13));
     });
+    sy += 54 + dRows * 48 + 8;
+    side.setContentSize(sy);
   }
 
   // ---------------- 도감 ----------------
   private renderCodex(c: Phaser.GameObjects.Container) {
     const st = store.state;
     const comp = st.codexCompletion();
-    this.t(c, X0 + 40, Y0 + 82, '영물 도감 靈物圖鑑', 30, COLORS.text, { title: true });
-    this.t(c, X0 + 360, Y0 + 92, `수집 ${comp.owned}/${comp.total} · 성장 기록 ${comp.stagesSeen}/${comp.stagesTotal} (완성률 ${comp.pct}%)`, 18, '#7a5a3a');
+    this.title(c, '영물 도감', '靈物圖鑑');
+    this.t(c, X0 + 782, TOP + 10, `수집 ${comp.owned}/${comp.total} · 성장 기록 ${comp.stagesSeen}/${comp.stagesTotal} · 완성률 ${comp.pct}%`, 15, SUB).setOrigin(1, 0);
+    const { a: grid } = this.area('grid', X0 + 26, Y0 + 134, 760, H - 156);
+    const CW = 242, CH = 152;
     MOUNT_ORDER.forEach((id, i) => {
       const col = i % 3, row = Math.floor(i / 3);
-      const x = X0 + 40 + col * 250, y = Y0 + 130 + row * 158;
+      const x = col * (CW + 10), y = row * (CH + 10);
       const owned = st.owns(id);
       const def = MOUNTS[id];
-      const card = this.add.rectangle(x, y, 236, 148, owned ? 0xf6ecd6 : 0xe6dcc8).setOrigin(0).setStrokeStyle(2, owned ? 0xc3352c : 0xb89466).setInteractive({ useHandCursor: true });
-      card.on('pointerup', () => { this.codexSel = id; audio.play('select'); this.render(); });
-      c.add(card);
+      const cd = card(this, x, y, CW, CH, owned ? 'normal' : 'lock');
+      tap(cd, () => { this.codexSel = id; audio.play('select'); this.render(); });
+      grid.add(cd);
       const m = st.data.mounts[id];
-      this.portrait(c, id, owned ? m!.stage : 2, x + 118, y + 116, 210, 100, owned ? 'normal' : 'silhouette', m?.skin);
-      this.t(c, x + 10, y + 120, owned ? `${def.name} ${def.hanja}` : `??? (${def.symbol})`, 17, owned ? COLORS.text : '#7a6a5a', { title: true });
-      this.t(c, x + 226, y + 124, owned ? `Lv.${m!.level}` : def.obtainable ? '획득 가능' : '추후', 14, owned ? '#c3352c' : '#8a7a6a').setOrigin(1, 0);
+      this.portrait(grid.content, id, owned ? m!.stage : 2, x + CW / 2, y + 116, CW - 24, 104, owned ? 'normal' : 'silhouette', m?.skin);
+      this.t(grid.content, x + 14, y + 122, owned ? `${def.name} ${def.hanja}` : `??? · ${def.symbol}`, 16, owned ? INK : '#7a6a5a', { title: true });
+      if (owned) this.t(grid.content, x + CW - 12, y + 125, `Lv.${m!.level}`, 13, RED).setOrigin(1, 0);
+      else this.tag(grid.content, x + CW - 10, y + 10, def.obtainable ? '획득 가능' : '추후', def.obtainable ? 0x2f7f74 : 0x8a7a6a);
     });
+    grid.setContentSize(Math.ceil(MOUNT_ORDER.length / 3) * (CH + 10));
     // 업적
-    const ax = X0 + 800;
-    this.t(c, ax, Y0 + 130, '수집 업적', 22, COLORS.text, { title: true });
-    st.achievements().forEach((a, i) => {
-      this.t(c, ax, Y0 + 168 + i * 50, `${a.done ? '◆' : '◇'} ${a.name}`, 18, a.done ? '#c3352c' : '#7a6a5a', { title: true });
-      this.t(c, ax + 20, Y0 + 192 + i * 50, a.desc, 14, '#5a4a3a');
+    c.add(sectionTitle(this, X0 + 826, TOP + 2, '수집 업적', 22));
+    const { a: ach } = this.area('ach', X0 + 812, Y0 + 134, 336, H - 156);
+    const achs = st.achievements();
+    achs.forEach((a, i) => {
+      const y = i * 70;
+      ach.add(card(this, 0, y, 328, 62, a.done ? 'sel' : 'normal'));
+      this.t(ach.content, 14, y + 10, `${a.done ? '◆' : '◇'} ${a.name}`, 17, a.done ? RED : '#7a6a5a', { title: true });
+      this.t(ach.content, 32, y + 36, a.desc, 13, SOFT);
     });
-    this.t(c, ax, Y0 + 580, `고서 조각 ${st.data.lorePages.length}장 수집`, 16, '#7a5a3a');
+    this.t(ach.content, 6, achs.length * 70 + 4, `고서 조각 ${st.data.lorePages.length}장 수집`, 14, SUB);
+    ach.setContentSize(achs.length * 70 + 30);
   }
 
   private renderCodexDetail(c: Phaser.GameObjects.Container, id: MountId) {
@@ -269,35 +382,38 @@ export class MenuScene extends Phaser.Scene {
     const def = MOUNTS[id];
     const m = st.data.mounts[id];
     const owned = !!m;
-    c.add(button(this, X0 + 100, Y0 + 100, 140, 44, '← 목록', () => { this.codexSel = null; this.render(); }, 'normal', 17));
-    this.t(c, X0 + 200, Y0 + 82, owned ? `${def.name} ${def.hanja}` : `미확인 영물 (${def.symbol})`, 34, COLORS.text, { title: true });
-    this.t(c, X0 + 200, Y0 + 126, owned ? `${def.title} · ${def.category === 'legend' ? '전설 영물' : '기본 영물'} · ${def.element} 속성 · 상징: ${def.symbol}` : '아직 만나지 못한 영물입니다.', 16, '#7a5a3a');
+    c.add(button(this, X0 + 104, TOP + 18, 132, 42, '← 목록', () => { this.codexSel = null; this.render(); }, 'normal', 16));
+    this.t(c, X0 + 194, TOP - 4, owned ? `${def.name} ${def.hanja}` : `미확인 영물 · ${def.symbol}`, 30, INK, { title: true });
+    this.t(c, X0 + 194, TOP + 36, owned ? `${def.title} · ${def.category === 'legend' ? '전설 영물' : '기본 영물'} · ${def.element} 속성 · 상징 ${def.symbol}` : '아직 만나지 못한 영물입니다.', 15, SUB);
     // 3단계 비교
+    const CW = 360;
     [0, 1, 2].forEach((s) => {
-      const x = X0 + 150 + s * 330;
+      const x = X0 + 30 + s * (CW + 20);
       const seen = owned && m!.stage >= s;
-      this.portrait(c, id, s, x, Y0 + 370, 290, 200, seen ? 'normal' : 'silhouette', seen ? m?.skin : undefined);
+      c.add(card(this, x, Y0 + 162, CW, 300, seen ? 'normal' : 'lock'));
+      this.portrait(c, id, s, x + CW / 2, Y0 + 368, CW - 30, 192, seen ? 'normal' : 'silhouette', seen ? m?.skin : undefined);
       const sd = def.stages[s];
-      this.t(c, x, Y0 + 380, `${sd.name} (Lv.${sd.minLevel})`, 20, seen ? COLORS.text : '#8a7a6a', { title: true }).setOrigin(0.5, 0);
+      this.t(c, x + CW / 2, Y0 + 376, `${sd.name} · Lv.${sd.minLevel}`, 19, seen ? INK : '#8a7a6a', { title: true }).setOrigin(0.5, 0);
       if (seen || (owned && s === m!.stage + 1)) {
-        this.t(c, x, Y0 + 410, sd.abilities.join(' · '), 14, '#5a4a3a', { align: 'center', wordWrap: { width: 300 } }).setOrigin(0.5, 0);
-        this.t(c, x, Y0 + 452, `${SKILLS[sd.attack].name} / ${SKILLS[sd.special].name}`, 14, '#7a3a2a', { align: 'center' }).setOrigin(0.5, 0);
-      } else this.t(c, x, Y0 + 410, '???', 16, '#8a7a6a').setOrigin(0.5, 0);
-      if (s < 2) this.t(c, x + 165, Y0 + 280, '›', 40, '#8a6a4a').setOrigin(0.5);
+        const ab = this.t(c, x + CW / 2, Y0 + 404, sd.abilities.join(' · '), 13, SOFT, { align: 'center', wordWrap: { width: CW - 30 } }).setOrigin(0.5, 0);
+        this.t(c, x + CW / 2, Y0 + 408 + ab.height, `${SKILLS[sd.attack].name} / ${SKILLS[sd.special].name}`, 13, '#8a3a2a', { align: 'center' }).setOrigin(0.5, 0);
+      } else this.t(c, x + CW / 2, Y0 + 406, '???', 16, '#8a7a6a').setOrigin(0.5, 0);
+      if (s < 2) this.t(c, x + CW + 10, Y0 + 300, '›', 34, '#a07a4a').setOrigin(0.5);
     });
-    const y = Y0 + 488;
-    this.t(c, X0 + 40, y, owned ? `이야기 — ${def.lore}` : `획득 방법 — ${def.acquisition}`, 16, '#3a2a2a', { wordWrap: { width: W - 90 } });
+    // 이야기·획득·성장 기록 (길면 끌어 넘기기)
+    const { a: lore } = this.area(`lore:${id}`, X0 + 34, Y0 + 476, W - 76, H - 494);
+    let y = 0;
+    const add = (s: string, size: number, color: string) => { const o = this.t(lore.content, 0, y, s, size, color, { wordWrap: { width: W - 90 }, lineSpacing: 4 }); y += o.height + 8; };
+    add(owned ? `이야기 — ${def.lore}` : `획득 방법 — ${def.acquisition}`, 15, INK);
     if (owned) {
-      this.t(c, X0 + 40, y + 52, `획득 방법 — ${def.acquisition}`, 14, '#5a4a3a');
+      add(`획득 방법 — ${def.acquisition}`, 14, SOFT);
       const hist = m!.history.map((h) => `${def.stages[h.stage].name} ${new Date(h.at).toLocaleDateString('ko-KR')} (Lv.${h.level})`).join('  →  ');
-      this.t(c, X0 + 40, y + 78, `성장 기록 — ${hist}`, 14, '#5a4a3a', { wordWrap: { width: W - 90 } });
-    } else if (!def.obtainable) {
-      this.t(c, X0 + 40, y + 52, '이 영물은 다음 지역 업데이트에서 만날 수 있습니다. (현재 빌드에서는 획득 불가)', 14, '#8a3a2a');
-    }
+      add(`성장 기록 — ${hist}`, 14, SOFT);
+    } else if (!def.obtainable) add('이 영물은 다음 지역 업데이트에서 만날 수 있습니다. (현재 빌드에서는 획득 불가)', 14, '#8a3a2a');
+    lore.setContentSize(y);
     analytics.track('codex_entry', { mount: id, view: true });
   }
 
-  // ---------------- 퀘스트 ----------------
   // ---------------- 빨간 점 ----------------
   private drawDots() {
     if (!this.dots) return;
@@ -308,8 +424,7 @@ export class MenuScene extends Phaser.Scene {
     const n: Partial<Record<Tab, number>> = { daily: cl.daily, pass: cl.pass, expedition: cl.expedition, quests: quest };
     TABS.forEach(([t], i) => {
       if (!n[t]) return;
-      const x = X0 + 76 + i * 112 + 44, y = Y0 + 22;
-      this.dots.add(this.add.circle(x, y, 8, 0xd63c34).setStrokeStyle(2, 0xffffff));
+      this.dots.add(this.add.circle(tabX(i) + 44, Y0 + 22, 7, 0xd63c34).setStrokeStyle(2, 0xfff6e4));
     });
   }
 
@@ -321,19 +436,19 @@ export class MenuScene extends Phaser.Scene {
   private renderDaily(c: Phaser.GameObjects.Container) {
     const st = store.state;
     L.ensureDaily(st);
-    this.t(c, X0 + 40, Y0 + 82, '출석 (7일)', 28, COLORS.text, { title: true });
-    this.t(c, X0 + 220, Y0 + 92, '하루 한 번 접속해 받기 · 빠진 날이 있어도 이어서', 15, '#7a5a3a');
+    this.title(c, '출석', '7일 · 하루 한 번 · 빠진 날이 있어도 이어서');
     const can = L.canClaimLogin(st);
     const cur = st.data.daily.loginDays % 7;
     L.LOGIN_REWARDS.forEach((r, i) => {
-      const x = X0 + 40 + i * 156, y = Y0 + 130;
+      const x = X0 + 30 + i * 160, y = Y0 + 142;
       const got = i < cur, today = i === cur;
-      c.add(this.add.rectangle(x, y, 146, 132, got ? 0xe6dcc6 : today && can ? 0xfff2c8 : 0xf6ecd6).setOrigin(0).setStrokeStyle(today && can ? 4 : 2, today && can ? 0xe2b14c : 0xb89466));
-      this.t(c, x + 73, y + 16, `${i + 1}일째`, 18, i === 6 ? '#c3352c' : COLORS.text, { title: true }).setOrigin(0.5, 0);
-      this.t(c, x + 73, y + 50, this.rewardText(r), 14, '#3a2a2a', { align: 'center', wordWrap: { width: 132 } }).setOrigin(0.5, 0);
-      if (got) this.t(c, x + 73, y + 104, '✓ 받음', 15, '#2f8a7a').setOrigin(0.5, 0);
+      c.add(card(this, x, y, 150, 134, today && can ? 'sel' : got ? 'lock' : 'normal'));
+      this.t(c, x + 75, y + 14, `${i + 1}일째`, 18, i === 6 ? RED : INK, { title: true }).setOrigin(0.5, 0);
+      this.t(c, x + 75, y + 46, this.rewardText(r), 14, INK, { align: 'center', wordWrap: { width: 132 } }).setOrigin(0.5, 0);
+      if (got) this.t(c, x + 75, y + 104, '✓ 받음', 15, JADE, { title: true }).setOrigin(0.5, 0);
+      else if (today && can) this.t(c, x + 75, y + 104, '오늘', 15, RED, { title: true }).setOrigin(0.5, 0);
     });
-    const lb = button(this, X0 + W - 150, Y0 + 92, 220, 44, can ? '오늘 출석 보상 받기' : '내일 또 만나요', () => {
+    const lb = button(this, X0 + W - 150, Y0 + 100, 220, 44, can ? '오늘 출석 보상 받기' : '내일 또 만나요', () => {
       if (L.claimLogin(st) >= 0) { st.save(); audio.play('chest'); toast(this, '출석 보상을 받았어요!'); }
       this.render();
     }, 'primary', 17);
@@ -341,58 +456,61 @@ export class MenuScene extends Phaser.Scene {
     c.add(lb);
 
     // 오늘의 임무
-    const my = Y0 + 290;
-    this.t(c, X0 + 40, my, '오늘의 임무', 26, COLORS.text, { title: true });
-    this.t(c, X0 + 220, my + 8, '자정에 새 임무 · 하나마다 금화 120 + 수행록 경험 100', 15, '#7a5a3a');
+    const my = Y0 + 300;
+    c.add(sectionTitle(this, X0 + 44, my, '오늘의 임무', 24, '자정에 새 임무 · 하나마다 금화 120 + 수행록 경험 100'));
     st.data.daily.missions.forEach((m, i) => {
       const def = L.MISSIONS.find((x) => x.id === m.id)!;
-      const y = my + 48 + i * 56;
+      const y = my + 46 + i * 60;
       const prog = L.missionProgress(st, m);
-      c.add(this.add.rectangle(X0 + 40, y, 760, 48, 0xf6ecd6).setOrigin(0).setStrokeStyle(2, 0xb89466));
-      this.t(c, X0 + 56, y + 12, `${m.claimed ? '✓' : prog >= def.target ? '★' : '·'} ${def.name}`, 18, COLORS.text, { title: true });
-      this.t(c, X0 + 230, y + 15, def.desc, 15, '#5a4a3a');
-      const b = bar(this, X0 + 470, y + 18, 180, 12, COLORS.exp);
+      const done = prog >= def.target;
+      c.add(card(this, X0 + 30, y, 774, 52, m.claimed ? 'lock' : done ? 'sel' : 'normal'));
+      this.t(c, X0 + 48, y + 14, `${m.claimed ? '✓' : done ? '★' : '·'} ${def.name}`, 18, INK, { title: true });
+      this.t(c, X0 + 220, y + 17, def.desc, 14, SOFT);
+      const b = bar(this, X0 + 470, y + 20, 170, 12, COLORS.exp);
       b.set(prog / def.target);
       c.add(b.g);
-      this.t(c, X0 + 660, y + 13, `${prog}/${def.target}`, 15, '#3a2a2a');
-      if (!m.claimed && prog >= def.target) c.add(button(this, X0 + 740, y + 24, 100, 36, '받기', () => { L.claimMission(st, m.id); st.save(); audio.play('chest'); this.render(); }, 'primary', 15));
+      this.t(c, X0 + 650, y + 15, `${prog}/${def.target}`, 14, INK);
+      if (!m.claimed && done) c.add(button(this, X0 + 748, y + 26, 92, 36, '받기', () => { L.claimMission(st, m.id); st.save(); audio.play('chest'); this.render(); }, 'primary', 15));
     });
-    const by = my + 48 + 3 * 56 + 4;
-    this.t(c, X0 + 56, by + 6, `모두 완료 보너스 — ${this.rewardText(L.MISSION_BONUS)} + 수행록 경험 150`, 16, '#7a5a3a');
-    if (L.canClaimBonus(st)) c.add(button(this, X0 + 740, by + 14, 100, 36, '받기', () => { L.claimBonus(st); st.save(); audio.play('chest'); this.render(); }, 'primary', 15));
-    else if (st.data.daily.bonusClaimed) this.t(c, X0 + 712, by + 6, '✓ 받음', 15, '#2f8a7a');
+    const by = my + 46 + 3 * 60 + 4;
+    this.t(c, X0 + 48, by + 8, `모두 완료 보너스 — ${this.rewardText(L.MISSION_BONUS)} + 수행록 경험 150`, 15, SUB);
+    if (L.canClaimBonus(st)) c.add(button(this, X0 + 748, by + 18, 92, 36, '받기', () => { L.claimBonus(st); st.save(); audio.play('chest'); this.render(); }, 'primary', 15));
+    else if (st.data.daily.bonusClaimed) this.t(c, X0 + 720, by + 8, '✓ 받음', 15, JADE);
 
     // 달빛 정기권
-    const px = X0 + 840, py = Y0 + 290;
-    c.add(this.add.rectangle(px, py, 300, 250, 0x2a2440).setOrigin(0).setStrokeStyle(3, 0xe2b14c));
-    this.t(c, px + 150, py + 16, '달빛 정기권', 24, '#ffe6a6', { title: true }).setOrigin(0.5, 0);
+    const px = X0 + 830, py = Y0 + 300, pw = 322;
+    c.add(card(this, px, py, pw, 270, 'dark'));
+    const moon = this.add.graphics();
+    moon.fillStyle(0xffe6a6, 0.18).fillCircle(px + pw - 54, py + 54, 34);
+    c.add(moon);
+    this.t(c, px + pw / 2, py + 18, '달빛 정기권', 24, '#ffe6a6', { title: true }).setOrigin(0.5, 0);
     const active = L.monthlyActive(st);
-    this.t(c, px + 150, py + 56, active ? `남은 기간 ${L.monthlyDaysLeft(st)}일` : '30일 동안 매일 접속하면', 16, '#f6ead0').setOrigin(0.5, 0);
-    this.t(c, px + 150, py + 84, `매일 ${this.rewardText(L.MONTHLY.daily)}`, 17, '#ffe6a6', { title: true }).setOrigin(0.5, 0);
-    this.t(c, px + 150, py + 114, active ? '오늘 받을 수 있어요' : `구매 즉시 ${this.rewardText(L.MONTHLY.instant)}`, 14, '#c8c0d8').setOrigin(0.5, 0);
+    this.t(c, px + pw / 2, py + 60, active ? `남은 기간 ${L.monthlyDaysLeft(st)}일` : '30일 동안 매일 접속하면', 15, '#f6ead0').setOrigin(0.5, 0);
+    this.t(c, px + pw / 2, py + 88, `매일 ${this.rewardText(L.MONTHLY.daily)}`, 17, '#ffe6a6', { title: true }).setOrigin(0.5, 0);
+    this.t(c, px + pw / 2, py + 120, active ? '오늘 받을 수 있어요' : `구매 즉시 ${this.rewardText(L.MONTHLY.instant)}`, 14, '#c8c0d8').setOrigin(0.5, 0);
     if (active) {
-      const mb = button(this, px + 150, py + 196, 200, 46, L.canClaimMonthly(st) ? '오늘 몫 받기' : '✓ 오늘 받음', () => { if (L.claimMonthly(st)) { st.save(); audio.play('chest'); } this.render(); }, 'primary', 17);
+      const mb = button(this, px + pw / 2, py + 214, 210, 46, L.canClaimMonthly(st) ? '오늘 몫 받기' : '✓ 오늘 받음', () => { if (L.claimMonthly(st)) { st.save(); audio.play('chest'); } this.render(); }, 'primary', 17);
       mb.setEnabled(L.canClaimMonthly(st));
       c.add(mb);
-    } else c.add(button(this, px + 150, py + 196, 200, 46, '4,900원 · 상점에서 보기', () => { this.shopCat = 'pass'; this.switchTab('shop'); }, 'primary', 16));
+    } else c.add(button(this, px + pw / 2, py + 214, 236, 46, '4,900원 · 상점에서 보기', () => { this.shopCat = 'pass'; this.switchTab('shop'); }, 'primary', 16));
   }
 
-  // ---------------- 영물 수행록 (시즌 패스) ----------------
+  // ---------------- 영물 수행록 (시즌 패스) — 30단계를 가로로 끌어 넘기기 ----------------
   private renderPass(c: Phaser.GameObjects.Container) {
     const st = store.state;
     const p = st.data.pass;
     const lv = L.passLevel(p.xp);
-    this.t(c, X0 + 40, Y0 + 82, L.PASS.name, 26, COLORS.text, { title: true });
-    this.t(c, X0 + 40, Y0 + 120, `${lv} / ${L.PASS.levels} 단계`, 22, '#c3352c', { title: true });
+    this.title(c, L.PASS.name);
+    this.t(c, X0 + 44, TOP + 44, `${lv} / ${L.PASS.levels} 단계`, 22, RED, { title: true });
     const xpIn = lv >= L.PASS.levels ? L.PASS.xpPerLevel : p.xp - lv * L.PASS.xpPerLevel;
-    const b = bar(this, X0 + 200, Y0 + 128, 320, 14, COLORS.exp);
+    const b = bar(this, X0 + 200, TOP + 51, 320, 14, COLORS.exp);
     b.set(xpIn / L.PASS.xpPerLevel);
     c.add(b.g);
-    this.t(c, X0 + 530, Y0 + 122, `${xpIn} / ${L.PASS.xpPerLevel}`, 15, '#5a4a3a');
-    this.t(c, X0 + 40, Y0 + 152, '경험: 구간 돌파 120(재도전 60) · 보스 정화 300 · 일일 임무 100 · 출석 50', 14, '#7a5a3a');
-    if (!p.premium) c.add(button(this, X0 + W - 170, Y0 + 124, 300, 50, '프리미엄 열기 · 9,900원', () => this.buy('p_pass_premium'), 'primary', 18));
-    else this.t(c, X0 + W - 300, Y0 + 116, '★ 프리미엄 열림', 22, '#c3352c', { title: true });
-    const all = button(this, X0 + W - 170, Y0 + 184, 160, 40, '모두 받기', () => {
+    this.t(c, X0 + 532, TOP + 47, `${xpIn} / ${L.PASS.xpPerLevel}`, 14, SOFT);
+    this.t(c, X0 + 44, TOP + 78, '경험: 구간 돌파 120(재도전 60) · 보스 정화 300 · 일일 임무 100 · 출석 50', 13, SUB);
+    if (!p.premium) c.add(button(this, X0 + W - 176, TOP + 22, 300, 50, '프리미엄 열기 · 9,900원', () => this.buy('p_pass_premium'), 'primary', 18));
+    else this.t(c, X0 + W - 40, TOP + 8, '★ 프리미엄 열림', 22, RED, { title: true }).setOrigin(1, 0);
+    const all = button(this, X0 + W - 110, TOP + 78, 170, 40, '모두 받기', () => {
       let n = 0;
       for (let i = 1; i <= lv; i++) { if (L.claimPass(st, 'free', i)) n++; if (L.claimPass(st, 'prem', i)) n++; }
       if (n) { st.save(); audio.play('chest'); toast(this, `보상 ${n}개를 받았어요`); }
@@ -400,63 +518,59 @@ export class MenuScene extends Phaser.Scene {
     }, 'normal', 16);
     all.setEnabled(L.passClaimable(st) > 0);
     c.add(all);
-    // 10단계씩
-    const pages = Math.ceil(L.PASS.levels / 10);
-    this.passPage = Math.min(this.passPage, pages - 1);
-    const y0 = Y0 + 220;
-    this.t(c, X0 + 40, y0 + 52, '무료', 18, COLORS.text, { title: true });
-    this.t(c, X0 + 40, y0 + 186, '프리미엄', 18, '#c3352c', { title: true });
-    for (let k = 0; k < 10; k++) {
-      const L1 = this.passPage * 10 + k + 1;
-      const x = X0 + 130 + k * 104;
+    // 단계 칸들
+    const COL = 106, top = Y0 + 214;
+    this.t(c, X0 + 44, top + 30 + 62, '무료', 18, INK, { title: true });
+    this.t(c, X0 + 44, top + 186 + 62, '프리미엄', 18, RED, { title: true });
+    const { a: lane, fresh } = this.area('lane', X0 + 136, top, W - 166, 338, { horizontal: true });
+    for (let k = 0; k < L.PASS.levels; k++) {
+      const L1 = k + 1;
+      const x = k * COL;
       const reached = L1 <= lv;
-      this.t(c, x + 48, y0, `${L1}`, 18, reached ? '#c3352c' : '#8a7a6a', { title: true }).setOrigin(0.5, 0);
-      for (const [track, ty] of [['free', y0 + 30], ['prem', y0 + 162]] as const) {
+      this.t(lane.content, x + 49, 0, `${L1}`, 18, reached ? RED : '#8a7a6a', { title: true }).setOrigin(0.5, 0);
+      for (const [track, ty] of [['free', 30], ['prem', 186]] as const) {
         const r = track === 'free' ? L.passFree(L1) : L.passPremium(L1);
         const got = (track === 'free' ? p.free : p.prem).includes(L1);
         const locked = track === 'prem' && !p.premium;
-        c.add(this.add.rectangle(x, ty, 96, 122, got ? 0xe6dcc6 : r.cosmetics ? 0xfff0d0 : 0xf6ecd6).setOrigin(0).setStrokeStyle(r.cosmetics ? 3 : 2, r.cosmetics ? 0xc3352c : 0xb89466));
-        this.t(c, x + 48, ty + 10, this.rewardText(r), 12, locked ? '#9a8a7a' : '#3a2a2a', { align: 'center', wordWrap: { width: 88 } }).setOrigin(0.5, 0);
-        if (got) this.t(c, x + 48, ty + 92, '✓', 18, '#2f8a7a').setOrigin(0.5, 0);
-        else if (locked) this.t(c, x + 48, ty + 92, '🔒', 16, '#7a5a3a').setOrigin(0.5, 0);
-        else if (reached) c.add(button(this, x + 48, ty + 102, 80, 30, '받기', () => { if (L.claimPass(st, track, L1)) { st.save(); audio.play('chest'); } this.render(); }, 'primary', 14));
+        lane.add(card(this, x, ty, 98, 146, got || locked ? 'lock' : r.cosmetics ? 'sel' : 'normal'));
+        this.t(lane.content, x + 49, ty + 12, this.rewardText(r), 12, locked ? '#9a8a7a' : INK, { align: 'center', wordWrap: { width: 86 } }).setOrigin(0.5, 0);
+        if (got) this.t(lane.content, x + 49, ty + 112, '✓', 20, JADE).setOrigin(0.5, 0);
+        else if (locked) this.t(lane.content, x + 49, ty + 112, '🔒', 16, SUB).setOrigin(0.5, 0);
+        else if (reached) lane.add(button(this, x + 49, ty + 122, 80, 32, '받기', () => { if (L.claimPass(st, track, L1)) { st.save(); audio.play('chest'); } this.render(); }, 'primary', 14));
       }
     }
-    const pb = (d: number, label: string, x: number) => {
-      const bb = button(this, x, Y0 + H - 40, 120, 40, label, () => { this.passPage += d; this.render(); }, 'normal', 16);
-      bb.setEnabled(this.passPage + d >= 0 && this.passPage + d < pages);
-      c.add(bb);
-    };
-    pb(-1, '◀ 이전', X0 + W / 2 - 140);
-    this.t(c, X0 + W / 2, Y0 + H - 52, `${this.passPage * 10 + 1}~${this.passPage * 10 + 10} 단계`, 16, '#5a4a3a').setOrigin(0.5, 0);
-    pb(1, '다음 ▶', X0 + W / 2 + 140);
+    lane.setContentSize(L.PASS.levels * COL - 8);
+    if (fresh) lane.reveal(Math.max(0, lv - 2) * COL, COL);
+    this.t(c, X0 + W / 2 + 60, Y0 + H - 40, '‹  끌어서 넘겨 보기  ›', 14, '#9a7a5a').setOrigin(0.5, 0);
   }
 
   // ---------------- 영물 원정 ----------------
   private renderExpedition(c: Phaser.GameObjects.Container) {
     const st = store.state;
-    this.t(c, X0 + 40, Y0 + 82, '영물 원정', 28, COLORS.text, { title: true });
-    this.t(c, X0 + 200, Y0 + 92, `쉬고 있는 영물을 원정 보내면, 게임을 꺼 두어도 시간이 지나 금화·영기석·경험치를 가져와요 (동시에 ${L.MAX_EXPEDITIONS}마리)`, 15, '#7a5a3a');
+    this.title(c, '영물 원정', `쉬는 영물을 보내면 게임을 꺼 두어도 금화·영기석·경험을 가져와요 (동시에 ${L.MAX_EXPEDITIONS}마리)`);
     const owned = st.ownedMounts();
+    const { a: grid } = this.area('grid', X0 + 26, Y0 + 134, W - 58, H - 156);
+    const CW = 364, CH = 156;
     owned.forEach((m, i) => {
       const col = i % 3, row = Math.floor(i / 3);
-      const x = X0 + 30 + col * 380, y = Y0 + 130 + row * 168;
+      const x = col * (CW + 10), y = row * (CH + 10);
       const def = MOUNTS[m.id];
       const e = st.data.expeditions[m.id];
-      c.add(this.add.rectangle(x, y, 366, 156, e ? 0xece4f4 : 0xf6ecd6).setOrigin(0).setStrokeStyle(2, 0xb89466));
-      this.portrait(c, m.id, m.stage, x + 70, y + 118, 120, 96, 'normal', m.skin);
-      this.t(c, x + 140, y + 10, `${def.name}  Lv.${m.level}`, 19, COLORS.text, { title: true });
+      grid.add(card(this, x, y, CW, CH, e ? 'sel' : 'normal'));
+      this.portrait(grid.content, m.id, m.stage, x + 70, y + CH - 14, 120, 110, 'normal', m.skin);
+      this.t(grid.content, x + 140, y + 12, `${def.name}  Lv.${m.level}`, 19, INK, { title: true });
       if (e) {
-        const left = L.expeditionLeftMs(st, m.id);
         const ex = L.EXPEDITIONS.find((x2) => x2.hours === e.hours);
-        this.t(c, x + 140, y + 42, `원정 중 · ${ex?.name ?? ''} (${e.hours}시간)`, 15, '#5a4a7a');
-        if (left > 0) {
-          const hh = Math.floor(left / 3600_000), mm = Math.floor((left % 3600_000) / 60_000), ss = Math.floor((left % 60_000) / 1000);
-          this.t(c, x + 140, y + 70, `남은 시간 ${hh}:${String(mm).padStart(2, '0')}:${String(ss).padStart(2, '0')}`, 20, '#3a2a2a', { title: true });
+        this.t(grid.content, x + 140, y + 42, `원정 중 · ${ex?.name ?? ''} (${e.hours}시간)`, 14, '#5a4a7a');
+        const left0 = L.expeditionLeftMs(st, m.id);
+        if (left0 > 0) {
+          const fmt = (left: number) => { const hh = Math.floor(left / 3600_000), mm = Math.floor((left % 3600_000) / 60_000), ss = Math.floor((left % 60_000) / 1000); return `남은 시간 ${hh}:${String(mm).padStart(2, '0')}:${String(ss).padStart(2, '0')}`; };
+          const tt = this.t(grid.content, x + 140, y + 72, fmt(left0), 20, INK, { title: true });
+          this.ticks.push(() => { const l = L.expeditionLeftMs(st, m.id); if (l <= 0) return true; tt.setText(fmt(l)); return false; });
         } else {
           const r = L.expeditionReward(m.level, e.hours);
-          this.t(c, x + 140, y + 70, `돌아왔어요! 금화 ${r.gold} · 영기석 ${r.stones} · 경험 ${r.exp}`, 14, '#2f8a7a', { wordWrap: { width: 220 } });
-          c.add(button(this, x + 290, y + 128, 120, 38, '보상 받기', () => {
+          this.t(grid.content, x + 140, y + 70, `돌아왔어요! 금화 ${r.gold} · 영기석 ${r.stones} · 경험 ${r.exp}`, 14, JADE, { wordWrap: { width: 212 } });
+          grid.add(button(this, x + 286, y + 128, 120, 38, '보상 받기', () => {
             const got = L.claimExpedition(st, m.id);
             if (got) { st.save(); audio.play('chest'); toast(this, `${def.name}이(가) 돌아왔다! 금화 ${got.gold} · 영기석 ${got.stones}`); }
             this.render();
@@ -464,132 +578,148 @@ export class MenuScene extends Phaser.Scene {
         }
       } else {
         const why = L.canStartExpedition(st, m.id);
-        this.t(c, x + 140, y + 40, why ?? '어디로 보낼까요?', 14, why ? '#9a5a4a' : '#5a4a3a', { wordWrap: { width: 220 } });
+        this.t(grid.content, x + 140, y + 42, why ?? '어디로 보낼까요?', 14, why ? '#9a5a4a' : SOFT, { wordWrap: { width: 212 } });
         if (!why) L.EXPEDITIONS.forEach((ex, k) => {
           const r = L.expeditionReward(m.level, ex.hours);
-          c.add(button(this, x + 172 + k * 70, y + 92, 64, 40, `${ex.hours}시간`, () => {
+          grid.add(button(this, x + 174 + k * 66, y + 94, 60, 38, `${ex.hours}시간`, () => {
             if (L.startExpedition(st, m.id, ex.hours)) { st.save(); audio.play('select'); toast(this, `${def.name} 원정 출발! (${ex.name})`); }
             this.render();
-          }, 'normal', 14));
-          if (k === 2) this.t(c, x + 140, y + 122, `8시간: 금화 ${r.gold} · 영기석 ${r.stones}`, 12, '#7a5a3a');
+          }, 'normal', 13));
+          if (k === 2) this.t(grid.content, x + 140, y + 124, `8시간: 금화 ${r.gold} · 영기석 ${r.stones}`, 12, SUB);
         });
       }
     });
+    grid.setContentSize(Math.ceil(owned.length / 3) * (CH + 10));
   }
 
+  // ---------------- 퀘스트 (받을 것 → 진행 중 → 잠김 → 끝낸 것 순) ----------------
   private renderQuests(c: Phaser.GameObjects.Container) {
     const st = store.state;
-    this.t(c, X0 + 40, Y0 + 82, '퀘스트', 30, COLORS.text, { title: true });
-    QUESTS.forEach((q, i) => {
-      const y = Y0 + 132 + i * 50 - this.scrollY;
-      if (y < Y0 + 110 || y > Y0 + H - 60) return;
+    const doneN = QUESTS.filter((q) => st.data.quests[q.id]?.claimed).length;
+    this.title(c, '퀘스트', `완료 ${doneN} / ${QUESTS.length}`);
+    const rank = (q: (typeof QUESTS)[number]) => { const r = st.data.quests[q.id]; return r?.done && !r.claimed ? 0 : r?.claimed ? 3 : st.questAvailable(q) ? 1 : 2; };
+    const list = [...QUESTS].sort((a, b) => rank(a) - rank(b));
+    const RW = W - 70, ROW = 66;
+    const { a: lst } = this.area('list', X0 + 26, Y0 + 134, RW + 8, H - 156);
+    const lc = lst.content;
+    list.forEach((q, i) => {
+      const y = i * ROW;
       const rec = st.data.quests[q.id];
       const avail = st.questAvailable(q);
       const target = st.questTarget(q);
       const prog = Math.min(target, st.questProgress(q));
-      this.t(c, X0 + 40, y, `${rec?.claimed ? '✓' : rec?.done ? '★' : '·'} ${q.name}`, 19, avail ? COLORS.text : '#8a7a6a', { title: true });
-      this.t(c, X0 + 240, y + 3, avail ? q.desc : '선행 퀘스트를 먼저 완료하세요', 15, '#5a4a3a');
-      const rw = [q.reward.gold ? `금화 ${q.reward.gold}` : '', ...Object.entries(q.reward.items ?? {}).map(([k, v]) => `${ITEMS[k]?.name} ${v}`), q.reward.mount ? `영물: ${MOUNTS[q.reward.mount].name}` : ''].filter(Boolean).join(', ');
-      this.t(c, X0 + 700, y + 3, `${prog}/${target}  ·  ${rw}`, 14, '#7a5a3a');
-      if (rec?.done && !rec.claimed) {
-        c.add(button(this, X0 + W - 110, y + 12, 130, 40, '보상 받기', () => { st.claimQuest(q.id); st.save(); audio.play('chest'); this.render(); }, 'primary', 16));
-      }
+      const claimable = !!rec?.done && !rec.claimed;
+      lst.add(card(this, 0, y, RW, 58, claimable ? 'sel' : rec?.claimed || !avail ? 'lock' : 'normal'));
+      this.t(lc, 18, y + 16, `${rec?.claimed ? '✓' : claimable ? '★' : '·'} ${q.name}`, 18, avail ? INK : '#8a7a6a', { title: true });
+      this.t(lc, 236, y + 19, avail ? q.desc : '선행 퀘스트를 먼저 완료하세요', 14, SOFT, { wordWrap: { width: 440 } });
+      const rw = [q.reward.gold ? `금화 ${q.reward.gold}` : '', ...Object.entries(q.reward.items ?? {}).map(([k, v]) => `${ITEMS[k]?.name} ${v}`), q.reward.mount ? `영물 ${MOUNTS[q.reward.mount].name}` : ''].filter(Boolean).join(' · ');
+      this.t(lc, 700, y + 9, `${prog} / ${target}`, 15, claimable || rec?.claimed ? JADE : RED, { title: true });
+      this.t(lc, 700, y + 32, rw, 13, SUB);
+      if (claimable) lst.add(button(this, RW - 76, y + 29, 128, 40, '보상 받기', () => { st.claimQuest(q.id); st.save(); audio.play('chest'); this.render(); }, 'primary', 16));
     });
+    lst.setContentSize(list.length * ROW);
   }
 
   // ---------------- 소지품 ----------------
   private renderInventory(c: Phaser.GameObjects.Container) {
     const st = store.state;
-    this.t(c, X0 + 40, Y0 + 82, '소지품', 30, COLORS.text, { title: true });
+    this.title(c, '소지품');
     const items = Object.values(ITEMS);
+    const { a: grid } = this.area('grid', X0 + 26, Y0 + 134, W - 58, H - 196);
+    const CW = 276, CH = 140;
     items.forEach((it, i) => {
-      const x = X0 + 40 + (i % 4) * 285, y = Y0 + 140 + Math.floor(i / 4) * 150;
-      c.add(this.add.rectangle(x, y, 270, 136, 0xf6ecd6).setOrigin(0).setStrokeStyle(2, 0xb89466));
-      c.add(this.add.image(x + 46, y + 48, `icon_${it.icon}`).setScale(0.9));
-      this.t(c, x + 90, y + 14, it.name, 19, COLORS.text, { title: true });
-      this.t(c, x + 90, y + 42, `× ${st.count(it.id)}`, 22, '#c3352c', { title: true });
-      this.t(c, x + 12, y + 84, it.desc, 13, '#5a4a3a', { wordWrap: { width: 250 } });
+      const x = (i % 4) * (CW + 10), y = Math.floor(i / 4) * (CH + 10);
+      grid.add(card(this, x, y, CW, CH));
+      const icon = this.add.image(x + 46, y + 50, `icon_${it.icon}`).setScale(0.9);
+      grid.add(icon);
+      this.t(grid.content, x + 92, y + 16, it.name, 19, INK, { title: true });
+      this.t(grid.content, x + 92, y + 44, `× ${st.count(it.id).toLocaleString('ko-KR')}`, 22, RED, { title: true });
+      this.t(grid.content, x + 14, y + 88, it.desc, 13, SOFT, { wordWrap: { width: CW - 28 } });
       if (it.id === 'yakgwa' && this.from === 'World' && st.count('yakgwa') > 0) {
-        c.add(button(this, x + 210, y + 50, 90, 36, '먹기', () => {
+        grid.add(button(this, x + CW - 52, y + 52, 84, 36, '먹기', () => {
           const w = this.scene.get('World') as WorldScene;
           if (st.useItem('yakgwa')) { w.player.heal(w.player.maxHp * 0.4); audio.play('levelup'); toast(this, '체력을 회복했다!'); }
           this.render();
         }, 'primary', 15));
       }
     });
-    this.t(c, X0 + 40, Y0 + H - 70, `모험 기록 — 달린 거리 ${Math.floor(st.data.stats.distance)}m · 처치 ${st.data.stats.defeats} · 보물 ${st.data.stats.chests} · 기절 ${st.data.stats.deaths}`, 16, '#5a4a3a');
+    grid.setContentSize(Math.ceil(items.length / 4) * (CH + 10));
+    c.add(card(this, X0 + 26, Y0 + H - 56, W - 60, 40, 'lock'));
+    this.t(c, X0 + 44, Y0 + H - 45, `모험 기록 — 달린 거리 ${Math.floor(st.data.stats.distance).toLocaleString('ko-KR')}m · 처치 ${st.data.stats.defeats} · 보물 ${st.data.stats.chests} · 기절 ${st.data.stats.deaths}`, 15, SOFT);
   }
 
   // ---------------- 상점 ----------------
   private renderShop(c: Phaser.GameObjects.Container) {
     const st = store.state;
-    this.t(c, X0 + 40, Y0 + 82, '상점', 30, COLORS.text, { title: true });
-    const banner = this.add.rectangle(X0 + 160, Y0 + 84, 700, 34, 0x3c3550).setOrigin(0).setStrokeStyle(2, 0xe2b14c);
-    c.add(banner);
-    this.t(c, X0 + 176, Y0 + 90, isLive() ? '안전 결제: 토스페이먼츠  ·  뽑기(확률형) 없음 · 정해진 보상만  ·  하루 결제 5만 원 미만' : `테스트 모드 · 실제 결제가 이루어지지 않습니다  ·  뽑기(확률형) 없음 · 정해진 보상만`, 15, '#ffe6a6');
+    this.title(c, '상점');
+    c.add(card(this, X0 + 150, TOP - 2, 790, 38, 'dark'));
+    this.t(c, X0 + 545, TOP + 17, isLive() ? '안전 결제 토스페이먼츠 · 뽑기(확률형) 없음 · 정해진 보상만 · 하루 결제 5만 원 미만' : '테스트 모드 · 실제 결제 없음 · 뽑기(확률형) 없음 · 정해진 보상만', 14, '#ffe6a6').setOrigin(0.5);
     const cats: [ProductCategory, string][] = [['skin', '영물 스킨'], ['decor', '영물 장식'], ['outfit', '라이더 의상'], ['package', '패키지'], ['pass', '수행록·정기권']];
     cats.forEach(([k, label], i) => {
-      c.add(button(this, X0 + 100 + i * 150, Y0 + 150, 140, 42, label, () => { this.shopCat = k; this.scrollY = 0; this.render(); }, this.shopCat === k ? 'primary' : 'normal', 16));
+      c.add(pill(this, X0 + 100 + i * 150, TOP + 62, 140, label, this.shopCat === k, () => { if (this.shopCat !== k) { this.shopCat = k; this.render(); } }, 16));
     });
     const list = PRODUCTS.filter((p) => p.category === this.shopCat);
+    const CW = 292, CH = 200;
+    const { a: grid } = this.area(`grid:${this.shopCat}`, X0 + 26, Y0 + 178, 3 * CW + 2 * 12, H - 206);
+    const gc = grid.content;
     list.forEach((p, i) => {
       const col = i % 3, row = Math.floor(i / 3);
-      const x = X0 + 30 + col * 300, y = Y0 + 190 + row * 196 - this.scrollY;
-      if (y < Y0 + 170 || y > Y0 + H - 150) return;
+      const x = col * (CW + 12), y = row * (CH + 12);
       const ownedAll = (p.grants.length > 0 && p.grants.every((g) => st.ownsCosmetic(g))) || (p.effect === 'pass_premium' && st.data.pass.premium);
-      const bought = p.oncePerAccount && st.data.purchases.some((x) => x.productId === p.id && x.status === 'paid');
-      c.add(this.add.rectangle(x, y, 286, 184, p.available ? 0xf6ecd6 : 0xe2dacb).setOrigin(0).setStrokeStyle(2, p.tier === '프리미엄' ? 0xc3352c : 0xb89466));
-      // 미리보기
+      const bought = p.oncePerAccount && st.data.purchases.some((x2) => x2.productId === p.id && x2.status === 'paid');
+      grid.add(card(this, x, y, CW, CH, !p.available ? 'lock' : p.tier === '프리미엄' ? 'sel' : 'normal'));
+      // 미리보기 (칸 안에 맞춰)
       if (p.category === 'skin' && p.mount) {
         const skinId = p.grants[0];
         const can = st.owns(p.mount) || p.available;
-        if (can && p.available) this.portrait(c, p.mount, Math.min(2, st.data.mounts[p.mount]?.stage ?? 1), x + 80, y + 120, 140, 100, 'normal', skinId);
-        else this.portrait(c, p.mount, 1, x + 80, y + 120, 140, 100, 'silhouette');
+        if (can && p.available) this.portrait(gc, p.mount, Math.min(2, st.data.mounts[p.mount]?.stage ?? 1), x + 78, y + 124, 136, 106, 'normal', skinId);
+        else this.portrait(gc, p.mount, 1, x + 78, y + 124, 136, 106, 'silhouette');
       } else {
         const icon = p.category === 'outfit' ? 'outfit' : p.category === 'package' ? 'package' : p.category === 'pass' ? 'page' :
           p.grants[0]?.includes('knot') ? 'knot' : p.grants[0]?.includes('jade') ? 'jade' : p.grants[0]?.includes('bell') ? 'bell' : p.grants[0]?.includes('cloud') ? 'cloud' : p.grants[0]?.includes('petal') ? 'petal' : 'foot';
-        c.add(this.add.image(x + 70, y + 74, `icon_${icon}`).setScale(1.3));
+        grid.add(this.add.image(x + 74, y + 76, `icon_${icon}`).setScale(1.3));
       }
-      this.t(c, x + 150, y + 12, p.name, 18, COLORS.text, { title: true, wordWrap: { width: 130 } });
-      this.t(c, x + 150, y + 56, p.tier, 14, p.tier === '프리미엄' ? '#c3352c' : '#7a5a3a');
-      this.t(c, x + 150, y + 76, `${p.price.toLocaleString('ko-KR')}원`, 20, '#3a2a2a', { title: true });
-      this.t(c, x + 12, y + 128, p.desc, 13, '#5a4a3a', { wordWrap: { width: 150 } });
+      this.t(gc, x + 152, y + 14, p.name, 18, INK, { title: true, wordWrap: { width: CW - 164 } });
+      this.t(gc, x + 152, y + 60, p.tier, 13, p.tier === '프리미엄' ? RED : SUB);
+      this.t(gc, x + 152, y + 80, `${p.price.toLocaleString('ko-KR')}원`, 20, INK, { title: true });
+      this.t(gc, x + 14, y + 134, p.desc, 12, SOFT, { wordWrap: { width: 150 }, maxLines: 4 });
       const needMount = p.category === 'skin' && p.mount && !st.owns(p.mount);
       if (ownedAll && p.grants.length === 1) {
         // 보유한 단품: 바로 장착/해제
         const on = st.isEquipped(p.grants[0]);
-        const b = button(this, x + 222, y + 150, 112, 38, on ? '✓ 장착 중' : '장착하기', () => {
+        grid.add(button(this, x + 222, y + 160, 120, 38, on ? '✓ 장착 중' : '장착하기', () => {
           st.equip(p.grants[0]);
           if (COSMETICS[p.grants[0]]?.kind === 'outfit') ensureRider(this, p.grants[0]);
           st.save();
           this.applyToWorld();
           this.render();
-        }, on ? 'primary' : 'normal', 15);
-        c.add(b);
+        }, on ? 'primary' : 'normal', 15));
       } else {
         const label = !p.available ? '출시 예정' : ownedAll || bought ? '보유 중' : needMount ? '영물 필요' : '구매';
-        const b = button(this, x + 222, y + 150, 112, 38, label, () => this.buy(p.id), 'primary', 15);
+        const b = button(this, x + 222, y + 160, 120, 38, label, () => this.buy(p.id), 'primary', 15);
         b.setEnabled(p.available && !ownedAll && !bought && !needMount);
-        c.add(b);
+        grid.add(b);
       }
     });
+    grid.setContentSize(Math.ceil(list.length / 3) * (CH + 12));
     // 구매 내역
-    const hy = Y0 + H - 110;
-    this.t(c, X0 + 940, Y0 + 150, '구매 내역 (테스트)', 18, COLORS.text, { title: true });
+    const hx = X0 + 960, hw = W - 990;
+    c.add(card(this, hx - 12, Y0 + 178, hw + 12, H - 206));
+    this.t(c, hx + 4, Y0 + 192, isLive() ? '구매 내역' : '구매 내역 (테스트)', 17, INK, { title: true });
     const ps = st.data.purchases.slice(-5).reverse();
-    if (!ps.length) this.t(c, X0 + 940, Y0 + 182, '아직 없음', 14, '#7a5a3a');
+    if (!ps.length) this.t(c, hx + 4, Y0 + 224, '아직 없어요', 14, SUB);
     ps.forEach((pc, i) => {
       const prod = PRODUCTS.find((x) => x.id === pc.productId);
-      const y = Y0 + 182 + i * 62;
-      this.t(c, X0 + 940, y, `${prod?.name ?? pc.productId} · ${pc.price.toLocaleString('ko-KR')}원`, 14, '#3a2a2a');
-      this.t(c, X0 + 940, y + 20, pc.status === 'paid' ? (pc.test ? '결제 완료(테스트)' : '결제 완료') : '환불됨', 12, pc.status === 'paid' ? '#2f8a7a' : '#8a3a2a');
-      if (pc.status === 'paid') c.add(button(this, X0 + 1100, y + 16, 70, 30, '환불', () => this.refund(pc.orderId), 'normal', 13));
+      const y = Y0 + 224 + i * 56;
+      this.t(c, hx + 4, y, `${prod?.name ?? pc.productId}`, 14, INK, { title: true });
+      this.t(c, hx + 4, y + 20, `${pc.price.toLocaleString('ko-KR')}원 · ${pc.status === 'paid' ? (pc.test ? '완료(테스트)' : '결제 완료') : '환불됨'}`, 12, pc.status === 'paid' ? JADE : '#8a3a2a');
+      if (pc.status === 'paid') c.add(button(this, hx + hw - 34, y + 18, 60, 28, '환불', () => this.refund(pc.orderId), 'normal', 12));
     });
-    this.t(c, X0 + 940, hy - 20, isLive() ? `※ 구매는 서버에 기록되어 기기를 바꿔도\n설정 > 구매 복구로 되찾을 수 있어요.\n환불: ${RELEASE.refundDays}일 이내 미사용 상품 (환불 정책)` : '※ 판매 빌드에서는 구매·환불·복구를\n서버 기록으로 검증합니다.', 12, '#7a5a3a');
+    this.t(c, hx + 4, Y0 + H - 116, isLive() ? `구매는 서버에 기록되어 기기를 바꿔도\n설정 › 구매 복구로 되찾을 수 있어요.\n환불: ${RELEASE.refundDays}일 이내 미사용 상품` : '판매 빌드에서는 구매·환불·복구를\n서버 기록으로 검증합니다.', 12, SUB, { lineSpacing: 3 });
     this.t(c, X0 + 40, Y0 + H - 22, businessLine(), 11, '#7a6a5a');
   }
 
-  private buy(productId: string) {
+  buy(productId: string) {
     const st = store.state;
     const p = PRODUCTS.find((x) => x.id === productId);
     if (!p) return;
@@ -638,10 +768,11 @@ export class MenuScene extends Phaser.Scene {
     const pnl = panel(this, GAME_W / 2 - 280, GAME_H / 2 - 160, 560, 320);
     const lines = eq.equipped.map((id) => `✓ ${COSMETICS[id]?.name ?? id} — 장착했어요`);
     for (const m of eq.needMount) lines.push(`※ ${MOUNTS[m].name}을(를) 얻으면 이 스킨을 장착할 수 있어요`);
-    const t1 = txt(this, GAME_W / 2, GAME_H / 2 - 112, `${name} 구매 완료!`, 30, COLORS.text, { title: true }).setOrigin(0.5);
-    const t2 = txt(this, GAME_W / 2, GAME_H / 2 - 60, lines.join('\n'), 19, '#3a2a2a', { align: 'center', lineSpacing: 8 }).setOrigin(0.5, 0);
-    const t3 = txt(this, GAME_W / 2, GAME_H / 2 + 74, isLive() ? '영물 탭·상점에서 바꿔 낄 수 있어요' : '테스트 결제 · 실제 청구 없음 · 영물 탭에서 바꿔 낄 수 있어요', 14, '#7a5a3a').setOrigin(0.5);
-    const ok = button(this, GAME_W / 2, GAME_H / 2 + 120, 180, 50, '확인', () => layer.destroy(), 'primary');
+    const t1 = txt(this, GAME_W / 2, GAME_H / 2 - 112, `${name} 구매 완료!`, 30, INK, { title: true }).setOrigin(0.5);
+    const t2 = txt(this, GAME_W / 2, GAME_H / 2 - 60, lines.join('\n'), 19, INK, { align: 'center', lineSpacing: 8 }).setOrigin(0.5, 0);
+    const t3 = txt(this, GAME_W / 2, GAME_H / 2 + 74, isLive() ? '영물 탭·상점에서 바꿔 낄 수 있어요' : '테스트 결제 · 실제 청구 없음 · 영물 탭에서 바꿔 낄 수 있어요', 14, SUB).setOrigin(0.5);
+    setScrollsHidden(this, true);
+    const ok = button(this, GAME_W / 2, GAME_H / 2 + 120, 180, 50, '확인', () => { layer.destroy(); setScrollsHidden(this, false); }, 'primary');
     layer.add([dim, pnl, t1, t2, t3, ok]);
   }
 
@@ -667,23 +798,26 @@ export class MenuScene extends Phaser.Scene {
   private renderSettings(c: Phaser.GameObjects.Container) {
     const st = store.state;
     const s = st.data.settings;
-    this.t(c, X0 + 40, Y0 + 82, '설정', 30, COLORS.text, { title: true });
+    this.title(c, '설정');
+    const lx = X0 + 30, lw = 560;
+    c.add(card(this, lx, Y0 + 134, lw, 236));
     const row = (y: number, label: string, value: string, dec: () => void, inc: () => void) => {
-      this.t(c, X0 + 60, y, label, 20);
-      c.add(button(this, X0 + 330, y + 12, 50, 42, '−', () => { dec(); this.apply(); }));
-      this.t(c, X0 + 400, y + 12, value, 20, '#3a2a2a').setOrigin(0.5);
-      c.add(button(this, X0 + 470, y + 12, 50, 42, '+', () => { inc(); this.apply(); }));
+      this.t(c, lx + 28, y, label, 19, INK, { title: true });
+      c.add(button(this, lx + 300, y + 12, 50, 42, '−', () => { dec(); this.apply(); }));
+      this.t(c, lx + 370, y + 12, value, 20, INK, { title: true }).setOrigin(0.5);
+      c.add(button(this, lx + 440, y + 12, 50, 42, '+', () => { inc(); this.apply(); }));
     };
-    row(Y0 + 140, '배경음', `${Math.round(s.music * 10)}`, () => (s.music = Math.max(0, +(s.music - 0.1).toFixed(1))), () => (s.music = Math.min(1, +(s.music + 0.1).toFixed(1))));
-    row(Y0 + 200, '효과음', `${Math.round(s.sfx * 10)}`, () => (s.sfx = Math.max(0, +(s.sfx - 0.1).toFixed(1))), () => (s.sfx = Math.min(1, +(s.sfx + 0.1).toFixed(1))));
-    this.t(c, X0 + 60, Y0 + 260, '터치 버튼', 20);
+    row(Y0 + 156, '배경음', `${Math.round(s.music * 10)}`, () => (s.music = Math.max(0, +(s.music - 0.1).toFixed(1))), () => (s.music = Math.min(1, +(s.music + 0.1).toFixed(1))));
+    row(Y0 + 216, '효과음', `${Math.round(s.sfx * 10)}`, () => (s.sfx = Math.max(0, +(s.sfx - 0.1).toFixed(1))), () => (s.sfx = Math.min(1, +(s.sfx + 0.1).toFixed(1))));
+    this.t(c, lx + 28, Y0 + 276, '터치 버튼', 19, INK, { title: true });
     (['auto', 'on', 'off'] as const).forEach((m, i) => {
-      c.add(button(this, X0 + 360 + i * 110, Y0 + 272, 100, 42, m === 'auto' ? '자동' : m === 'on' ? '켜기' : '끄기', () => { s.touch = m; this.apply(); }, s.touch === m ? 'primary' : 'normal', 16));
+      c.add(pill(this, lx + 300 + i * 96, Y0 + 288, 88, m === 'auto' ? '자동' : m === 'on' ? '켜기' : '끄기', s.touch === m, () => { s.touch = m; this.apply(); }, 15));
     });
-    this.t(c, X0 + 60, Y0 + 330, '조작법', 20, COLORS.text, { title: true });
-    this.t(c, X0 + 60, Y0 + 362, 'PC: A/D·←→ 이동 · Space 점프(길게: 높이/활공) · Z 공격 · X 돌진 · C 기술 · V 필살기\nQ 영물 교체 · Esc 메뉴 · 비행 중: Space/W 상승, S 하강\n모바일: 왼쪽 원형 방향키, 오른쪽 점프·공격·기술·필살기·돌진 버튼', 15, '#3a2a2a', { lineSpacing: 6 });
-    this.t(c, X0 + 60, Y0 + 450, `저장: 이 브라우저에 자동 저장됨 (${new Date(st.data.updatedAt).toLocaleString('ko-KR')}) · 총 플레이 ${Math.round(st.data.playTimeSec / 60)}분`, 14, '#5a4a3a');
-    c.add(button(this, X0 + 160, Y0 + 510, 200, 46, '진행 초기화', () => {
+    this.t(c, lx + 28, Y0 + 326, `저장: 이 브라우저에 자동 저장 (${new Date(st.data.updatedAt).toLocaleString('ko-KR')}) · 총 ${Math.round(st.data.playTimeSec / 60)}분`, 13, SOFT);
+    c.add(card(this, lx, Y0 + 382, lw, 186));
+    this.t(c, lx + 28, Y0 + 398, '조작법', 19, INK, { title: true });
+    this.t(c, lx + 28, Y0 + 430, 'PC  A/D·←→ 이동 · Space 점프(길게: 높이/활공)\n      Z 공격 · X 돌진 · C 기술 · V 필살기 · Q 영물 교체 · Esc 메뉴\n      비행 중 Space/W 상승 · S 하강\n휴대폰  왼쪽 원형 방향키 · 오른쪽 점프·공격·기술·필살기·돌진', 14, INK, { lineSpacing: 7 });
+    c.add(button(this, lx + 110, Y0 + 606, 190, 42, '진행 초기화', () => {
       confirmBox(this, '모든 진행 상황을 지울까요?\n(되돌릴 수 없습니다)', () => {
         st.reset();
         st.save();
@@ -692,34 +826,35 @@ export class MenuScene extends Phaser.Scene {
         this.scene.stop();
         this.scene.start('Title');
       }, '초기화');
-    }, 'normal', 17));
-    const rx = X0 + 660;
-    this.t(c, rx, Y0 + 140, '정보', 20, COLORS.text, { title: true });
-    this.t(c, rx, Y0 + 172, [
+    }, 'normal', 16));
+    const rx = X0 + 612, rw = W - 642;
+    c.add(card(this, rx, Y0 + 134, rw, 152));
+    this.t(c, rx + 24, Y0 + 150, '정보', 19, INK, { title: true });
+    this.t(c, rx + 24, Y0 + 180, [
       `신수도감 (神獸圖鑑) v${RELEASE.version}${isLive() ? '' : ' · 테스트 결제'}`,
       '글꼴: 고운바탕·고운돋움·Noto Serif KR (SIL OFL 1.1) · 엔진: Phaser (MIT)',
-      '진행 상황은 이 브라우저에 저장됩니다.',
-    ].join('\n'), 13, '#3a2a2a', { lineSpacing: 6 });
+    ].join('\n'), 13, INK, { lineSpacing: 6 });
     const open = (f: string) => window.open(`legal/${f}.html`, '_blank', 'noopener');
-    c.add(button(this, rx + 60, Y0 + 262, 116, 36, '이용약관', () => open('terms'), 'normal', 14));
-    c.add(button(this, rx + 182, Y0 + 262, 116, 36, '개인정보', () => open('privacy'), 'normal', 14));
-    c.add(button(this, rx + 304, Y0 + 262, 116, 36, '환불 정책', () => open('refund'), 'normal', 14));
+    c.add(button(this, rx + 84, Y0 + 252, 120, 36, '이용약관', () => open('terms'), 'normal', 14));
+    c.add(button(this, rx + 212, Y0 + 252, 120, 36, '개인정보', () => open('privacy'), 'normal', 14));
+    c.add(button(this, rx + 340, Y0 + 252, 120, 36, '환불 정책', () => open('refund'), 'normal', 14));
     // 구매 복구 (기기 변경·저장 삭제 후)
-    this.t(c, rx, Y0 + 300, '구매 복구 코드', 18, COLORS.text, { title: true });
-    this.t(c, rx, Y0 + 328, st.data.account.customerKey, 16, '#c3352c', { title: true });
-    this.t(c, rx, Y0 + 352, '기기를 바꾸면 이 코드를 입력해 구매한 상품을 되찾을 수 있어요.\n다른 사람에게 알려 주지 마세요.', 12, '#5a4a3a', { lineSpacing: 4 });
-    c.add(button(this, rx + 60, Y0 + 410, 116, 36, '코드 복사', () => {
+    c.add(card(this, rx, Y0 + 298, rw, 270));
+    this.t(c, rx + 24, Y0 + 314, '구매 복구 코드', 19, INK, { title: true });
+    this.t(c, rx + 24, Y0 + 346, st.data.account.customerKey, 16, RED, { title: true });
+    this.t(c, rx + 24, Y0 + 374, '기기를 바꾸면 이 코드를 입력해 구매한 상품을 되찾을 수 있어요.\n다른 사람에게 알려 주지 마세요.', 12, SOFT, { lineSpacing: 4 });
+    c.add(button(this, rx + 84, Y0 + 438, 120, 38, '코드 복사', () => {
       navigator.clipboard?.writeText(st.data.account.customerKey).then(() => toast(this, '복사했어요'), () => toast(this, st.data.account.customerKey));
     }, 'normal', 14));
-    c.add(button(this, rx + 182, Y0 + 410, 116, 36, '코드 입력', () => {
+    c.add(button(this, rx + 212, Y0 + 438, 120, 38, '코드 입력', () => {
       const v = (window.prompt('구매 복구 코드를 입력하세요') ?? '').trim().toUpperCase();
       if (!/^SD[0-9A-Z]{10,40}$/.test(v)) { if (v) toast(this, '코드 형식이 맞지 않아요', '#ffb0a0'); return; }
       st.data.account.customerKey = v;
       st.save();
       this.restore();
     }, 'normal', 14));
-    c.add(button(this, rx + 304, Y0 + 410, 116, 36, '구매 복구', () => this.restore(), 'primary', 14));
-    this.t(c, rx, Y0 + 446, businessLine(), 11, '#7a6a5a', { wordWrap: { width: 470 } });
+    c.add(button(this, rx + 340, Y0 + 438, 120, 38, '구매 복구', () => this.restore(), 'primary', 14));
+    this.t(c, rx + 24, Y0 + 476, businessLine(), 11, '#7a6a5a', { wordWrap: { width: rw - 48 } });
   }
 
   private async restore() {

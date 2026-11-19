@@ -545,6 +545,14 @@ export function generateCommon(scene: Phaser.Scene) {
     ['ui_btn', () => O.paintButton('normal')],
     ['ui_btn_primary', () => O.paintButton('primary')],
     ['ui_btn_disabled', () => O.paintButton('disabled')],
+    ['ui_card', () => O.paintCard('normal')],
+    ['ui_card_sel', () => O.paintCard('sel')],
+    ['ui_card_dark', () => O.paintCard('dark')],
+    ['ui_card_lock', () => O.paintCard('lock')],
+    ['ui_dancheong', () => O.paintDancheong()],
+    ['ui_seal', () => O.paintSealButton()],
+    ['ui_tab', () => O.paintTab(false)],
+    ['ui_tab_on', () => O.paintTab(true)],
   ];
   for (const icon of ['left', 'right', 'down', 'jump', 'attack', 'skill', 'dash', 'pause', 'menu', 'swap']) {
     jobs.push([`btn_${icon}`, () => O.paintRoundButton(icon)]);
