@@ -4,8 +4,9 @@ import { MOUNTS, MOUNT_ORDER, mountStats } from '../data/mounts.ts';
 import { QUESTS } from '../data/quests.ts';
 import { COSMETICS } from '../data/cosmetics.ts';
 import { STAGES } from '../data/maps/wolha.ts';
+import { newLive, type LiveData } from './live.ts';
 
-export const SAVE_VERSION = 2;
+export const SAVE_VERSION = 3;
 export const SAVE_KEY = 'shinsu-dogam.save';
 
 export interface MountState {
@@ -19,7 +20,7 @@ export interface MountState {
   skin?: string;
 }
 
-export interface SaveData {
+export interface SaveData extends LiveData {
   version: number;
   createdAt: number;
   updatedAt: number;
@@ -28,10 +29,10 @@ export interface SaveData {
   mounts: Partial<Record<MountId, MountState>>;
   inventory: Record<string, number>;
   /** 스테이지 id → 최고 기록 */
-  stages: Record<string, { cleared: boolean; bestTime?: number; chests: string[]; pickups: string[] }>;
+  stages: Record<string, { cleared: boolean; bestTime?: number; chests: string[]; pickups: string[]; stars?: number }>;
   currentStage: string;
   quests: Record<string, { progress: number; done: boolean; claimed: boolean }>;
-  stats: { distance: number; defeats: number; chests: number; deaths: number; bosses: string[] };
+  stats: { distance: number; defeats: number; chests: number; deaths: number; bosses: string[]; clears: number; coins: number; ults: number };
   codexSeen: MountId[];
   lorePages: string[];
   cosmetics: { owned: string[]; outfit: string; decor: string[]; trail: string | null };
@@ -63,7 +64,7 @@ export function newSave(now = Date.now()): SaveData {
     stages: {},
     currentStage: '1-1',
     quests: {},
-    stats: { distance: 0, defeats: 0, chests: 0, deaths: 0, bosses: [] },
+    stats: { distance: 0, defeats: 0, chests: 0, deaths: 0, bosses: [], clears: 0, coins: 0, ults: 0 },
     codexSeen: ['wolf'],
     lorePages: [],
     cosmetics: { owned: ['outfit_default'], outfit: 'outfit_default', decor: [], trail: null },
@@ -71,6 +72,7 @@ export function newSave(now = Date.now()): SaveData {
     settings: { music: 0.5, sfx: 0.7, touch: 'auto', showFps: false },
     tutorialDone: false,
     gifts: [],
+    ...newLive(),
   };
 }
 
@@ -87,6 +89,12 @@ export function migrate(raw: unknown): SaveData {
     cosmetics: { ...base.cosmetics, ...(d.cosmetics ?? {}) },
     settings: { ...base.settings, ...(d.settings ?? {}) },
     mounts: { ...(d.mounts ?? base.mounts) },
+    // v2 → v3: 출석·일일 임무·수행록·정기권·원정·지역 별 보상
+    daily: { ...base.daily, ...(d.daily ?? {}) },
+    pass: { ...base.pass, ...(d.pass ?? {}) },
+    monthly: { ...base.monthly, ...(d.monthly ?? {}) },
+    expeditions: { ...(d.expeditions ?? {}) },
+    regionRewards: [...(d.regionRewards ?? [])],
     version: SAVE_VERSION,
   };
   // v1 → v2: 성장 기록(history) 필드 추가
@@ -185,8 +193,12 @@ export class GameState {
   ownedMounts(): MountState[] {
     return MOUNT_ORDER.filter((id) => this.data.mounts[id]).map((id) => this.data.mounts[id]!);
   }
+  /** 원정 중이 아닌, 지금 탈 수 있는 영물 */
+  rideableMounts(): MountState[] {
+    return this.ownedMounts().filter((m) => !this.data.expeditions[m.id]);
+  }
   setActive(id: MountId) {
-    if (!this.owns(id)) return false;
+    if (!this.owns(id) || this.data.expeditions[id]) return false;
     this.data.activeMount = id;
     this.emit({ type: 'changed' });
     return true;
@@ -287,9 +299,11 @@ export class GameState {
   stageRec(id: string) {
     return (this.data.stages[id] ??= { cleared: false, chests: [], pickups: [] });
   }
+  /** 플레이테스트 페이지: 모든 지도를 바로 시험해 볼 수 있게 (정식 빌드에서는 꺼짐, 저장 데이터는 바꾸지 않음) */
+  static openAll = false;
   isUnlocked(stageId: string) {
     const idx = STAGES.findIndex((s) => s.id === stageId);
-    if (idx <= 0) return true;
+    if (idx <= 0 || GameState.openAll) return true;
     return !!this.data.stages[STAGES[idx - 1].id]?.cleared;
   }
   clearStage(id: string, time: number) {
@@ -318,7 +332,7 @@ export class GameState {
   }
   recordDefeat(monster: string) {
     this.data.stats.defeats++;
-    if (monster === 'boss' && !this.data.stats.bosses.includes('boss')) this.data.stats.bosses.push('boss');
+    if (monster.startsWith('boss') && !this.data.stats.bosses.includes(monster)) this.data.stats.bosses.push(monster);
     this.updateQuests();
   }
 
@@ -335,11 +349,12 @@ export class GameState {
       case 'level': return Math.max(...this.ownedMounts().map((m) => m.level)) >= g.level ? 1 : 0;
       case 'evolve': return this.ownedMounts().some((m) => m.stage >= g.stage) ? 1 : 0;
       case 'boss': return d.stats.bosses.includes(g.boss) ? 1 : 0;
+      case 'collect_mounts': return Math.min(g.count, this.ownedMounts().length);
     }
   }
   questTarget(q: QuestDef): number {
     const g = q.goal;
-    return g.type === 'distance' ? g.meters : g.type === 'defeat' || g.type === 'chest' || g.type === 'collect' ? g.count : 1;
+    return g.type === 'distance' ? g.meters : g.type === 'defeat' || g.type === 'chest' || g.type === 'collect' || g.type === 'collect_mounts' ? g.count : 1;
   }
   questAvailable(q: QuestDef) {
     return (q.requires ?? []).every((r) => this.data.quests[r]?.done);

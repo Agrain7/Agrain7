@@ -46,10 +46,40 @@ def mist_grade(rgba):
     return out
 
 
-def sky(ref):
-    """하늘: 참고 화면 하늘색 그라데이션 + 하늘 결(구름 얼룩)을 크게 늘려 덮음"""
+def theme_grade(rgba, kind):
+    """지역 테마 색 보정 (참고 화면 조각을 같은 그림 그대로, 빛깔만 바꿈)"""
+    if kind == 'mist':
+        return mist_grade(rgba)
+    out = rgba.copy()
+    c = out[..., :3] / 255
+    if kind == 'sea':
+        c = c * np.array([0.78, 0.98, 1.02]) + np.array([0.0, 0.04, 0.06])
+        c = c * 0.85 + np.array([0.55, 0.85, 0.88]) * 0.15
+    elif kind == 'fire':
+        c = c * np.array([1.12, 0.84, 0.7]) + np.array([0.06, 0.0, 0.0])
+        c = c * 0.88 + np.array([1.0, 0.62, 0.4]) * 0.12
+    elif kind == 'paradise':
+        c = c * 0.82 + np.array([1.0, 0.93, 0.9]) * 0.18
+    elif kind == 'snow':
+        l = c.mean(axis=2, keepdims=True)
+        c = (c * 0.5 + l * 0.5) * 0.75 + np.array([0.86, 0.92, 1.0]) * 0.25
+    out[..., :3] = np.clip(c, 0, 1) * 255
+    return out
+
+
+SKY_COLORS = {
+    'dusk': ((86, 104, 160), (120, 136, 190), (176, 174, 210), (234, 214, 206)),
+    'sea': ((60, 130, 170), (100, 170, 200), (170, 215, 220), (225, 240, 232)),
+    'fire': ((120, 64, 96), (196, 96, 92), (242, 156, 104), (255, 218, 156)),
+    'paradise': ((120, 150, 215), (170, 185, 238), (240, 205, 220), (255, 240, 220)),
+    'snow': ((100, 130, 180), (160, 185, 220), (220, 230, 245), (246, 249, 255)),
+}
+
+
+def sky(ref, kind='dusk'):
+    """하늘: 참고 화면 하늘색 그라데이션 + 큼직한 붓결 얼룩 (지역 테마별 색)"""
     W, H = 1280, 720
-    top, mid, low, bot = np.array([86, 104, 160.]), np.array([120, 136, 190.]), np.array([176, 174, 210.]), np.array([234, 214, 206.])
+    top, mid, low, bot = (np.array(c, np.float64) for c in SKY_COLORS[kind])
     y = np.linspace(0, 1, H)[:, None, None]
     g = np.where(y < 0.4, top + (mid - top) * (y / 0.4), np.where(y < 0.72, mid + (low - mid) * ((y - 0.4) / 0.32), low + (bot - low) * ((y - 0.72) / 0.28)))
     g = np.broadcast_to(g, (H, W, 3)).copy()
@@ -206,13 +236,16 @@ def main():
     s = sky(ref)
     save(s, 'dusk_sky.png')
     save(mist_grade(s), 'mist_sky.png')
+    for kind in ('sea', 'fire', 'paradise', 'snow'):
+        save(sky(ref, kind), f'{kind}_sky.png')
     save(moon(ref), 'moon.png')
     c = clouds(ref)
-    save(c, 'dusk_clouds.png')
-    save(mist_grade(c), 'mist_clouds.png')
     f = forest(ref)
+    save(c, 'dusk_clouds.png')
     save(f, 'dusk_forest.png')
-    save(mist_grade(f), 'mist_forest.png')
+    for kind in ('mist', 'sea', 'fire', 'paradise', 'snow'):
+        save(theme_grade(c, kind), f'{kind}_clouds.png')
+        save(theme_grade(f, kind), f'{kind}_forest.png')
     save(bridge(ref), 'bridge_top.png')
     pav = [(198, 549), (222, 536), (244, 522), (252, 507), (300, 504), (314, 521), (334, 535), (351, 546), (342, 556),
            (338, 600), (344, 622), (344, 643), (204, 643), (204, 622), (210, 600), (208, 557)]

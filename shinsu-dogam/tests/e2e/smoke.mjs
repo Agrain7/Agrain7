@@ -87,7 +87,7 @@ try {
   check('다음 구간(1-2) 시작', (await world(page, (w) => w.map.id)) === '1-2');
   // 전투: 첫 산돼지 옆으로 이동해 공격
   await world(page, (w) => { const m = w.monsters[0]; w.player.body.reset(m.x - 90, m.body.bottom - 40); w.player.facing = 1; return 1; });
-  for (let i = 0; i < 14; i++) { await page.keyboard.press('j'); await sleep(380); if (await world(page, (w, s) => s.data.stats.defeats >= 1)) break; }
+  for (let i = 0; i < 14; i++) { await page.keyboard.press('z'); await sleep(380); if (await world(page, (w, s) => s.data.stats.defeats >= 1)) break; }
   const st = await world(page, (w, s) => ({ defeats: s.data.stats.defeats, exp: s.active.exp, lv: s.active.level, m0: w.monsters[0]?.dead ?? true }));
   check('몬스터 처치 + 경험치', st.defeats >= 1 && (st.exp > 0 || st.lv > 1), JSON.stringify(st));
   await page.screenshot({ path: `${OUT}/05_combat.png` });
@@ -95,7 +95,7 @@ try {
   await page.keyboard.press('Escape');
   await sleep(800);
   check('메뉴 열림(월드 일시정지)', (await activeScenes(page)).includes('Menu'));
-  for (const [x, name] of [[310, 'codex'], [760, 'shop']]) {
+  for (const [x, name] of [[238, 'codex'], [910, 'shop']]) { // 메뉴 탭: X0(50) + 76 + i × 112
     await page.mouse.click(x, 74);
     await sleep(600);
     await page.screenshot({ path: `${OUT}/06_menu_${name}.png` });
@@ -116,12 +116,12 @@ try {
   // 원거리 공격 (적이 멀면 자동 발사) + 필살기
   await world(page, (w) => { w.player.body.reset(300, 820); w.player.facing = 1; w.player.attackCD = 0; return 1; });
   await sleep(300);
-  await page.keyboard.press('j');
+  await page.keyboard.press('z');
   await sleep(120);
   const proj = await world(page, (w) => w.combat.projs.filter((p) => !p.hostile).length);
   check('원거리 공격 발사', proj >= 1, `투사체 ${proj}개`);
   await world(page, (w) => { w.player.ult = 100; return 1; });
-  await page.keyboard.press('u');
+  await page.keyboard.press('v');
   await sleep(2600);
   const ult = await world(page, (w) => ({ ult: Math.round(w.player.ult), freeze: w.freezeT <= 0, noCutin: !w.scene.get('Hud').children.list.some((o) => o.type === 'Text' && /월광참|깃털폭풍|뇌우|염화강림|금강포효|대해일|서광|심판화|천상광/.test(o.text ?? '')) }));
   check('필살기 발동 (게이지 소모, 글자·화면 멈춤 없음)', ult.ult < 30 && ult.freeze && ult.noCutin, JSON.stringify(ult));
@@ -170,6 +170,21 @@ try {
   // 참고 화면 몬스터 (산돼지 원화 리깅)
   const mon = await world(page, (w) => ({ boar: w.textures.exists('mon_boar') && w.anims.exists('mon_boar:run'), boss: w.textures.exists('mon_boss') && w.anims.exists('mon_boss:cast') }));
   check('참고 화면 몬스터 그림 (산돼지·흑운 산군)', mon.boar && mon.boss, JSON.stringify(mon));
+  // 출석 보상 (메뉴 > 일일)
+  await world(page, (w, s) => { s.data.daily.loginClaimedOn = ''; w.openMenu('daily'); return 1; });
+  await sleep(900);
+  await page.mouse.click(1080, 126);
+  await sleep(600);
+  const login = await page.evaluate(() => window.__SD__.store.state.data.daily.loginDays);
+  check('출석 보상 받기 (일일 탭)', login === 1, `출석 ${login}일`);
+  await page.keyboard.press('Escape');
+  await sleep(500);
+  // 새 지역 구간 시작 (운무협곡 2-1: 지역 배경을 그때 불러옴)
+  await world(page, (w) => { w.scene.stop('Hud'); w.scene.restart({ stage: '2-1' }); return 1; });
+  await sleep(4000);
+  const reg = await world(page, (w) => ({ id: w.map.id, name: w.map.name, bg: w.textures.exists('ref_mist_cliffs'), mons: w.monsters.length }));
+  check('새 지역 구간 (운무협곡 2-1)', reg.id === '2-1' && reg.name === '운무협곡' && reg.bg && reg.mons > 0, JSON.stringify(reg));
+  await page.screenshot({ path: `${OUT}/09_region2.png` });
   await page.screenshot({ path: `${OUT}/07_fly.png` });
   // 저장 → 새로고침 → 이어하기
   await page.evaluate(() => window.__SD__.store.state.save());
@@ -188,12 +203,16 @@ try {
   const P = (gx, gy) => ({ x: box.x + (gx / 1280) * box.w, y: box.y + (gy / 720) * box.h });
   const mx0 = await world(m.page, (w) => w.player.x);
   const cdp = await m.ctx.newCDPSession(m.page);
-  const r = P(222, 628);
-  await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: r.x, y: r.y, id: 1 }] });
+  // 원형 방향키: 가운데를 누른 채 오른쪽으로 끌기
+  const jA = P(146, 602), jB = P(215, 604);
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: jA.x, y: jA.y, id: 1 }] });
+  await sleep(80);
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: jB.x, y: jB.y, id: 1 }] });
   await sleep(1000);
+  const knob = await m.page.evaluate(() => { const h = window.__SD__.game.scene.getScene('Hud'); return h.joy ? Math.round(h.joy.knob.x - h.joy.cx) : null; });
   await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
   const mx1 = await world(m.page, (w) => w.player.x);
-  check('모바일 터치 이동', mx1 - mx0 > 120, `${Math.round(mx1 - mx0)}px`);
+  check('모바일 원형 방향키 이동', mx1 - mx0 > 120 && knob > 35, `${Math.round(mx1 - mx0)}px, 손잡이 ${knob}px`);
   const touchVisible = await m.page.evaluate(() => window.__SD__.game.scene.getScene('Hud').showBtns);
   check('모바일 터치 버튼 표시', touchVisible === true);
   await m.page.screenshot({ path: `${OUT}/08_mobile.png` });

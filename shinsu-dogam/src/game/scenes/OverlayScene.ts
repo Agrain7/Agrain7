@@ -5,6 +5,7 @@ import type { WorldScene } from './WorldScene.ts';
 import { txt, panel, button } from '../../ui/widgets.ts';
 import { store } from '../ctx.ts';
 import { MOUNTS, SKILLS } from '../../data/mounts.ts';
+import type { MountId } from '../../data/types.ts';
 import { MOUNT_ART, artKey } from '../../data/mountArt.ts';
 import { ensurePortrait } from '../textures.ts';
 import { GAME_W, GAME_H, COLORS, AUTOTEST } from '../config.ts';
@@ -168,7 +169,16 @@ export class OverlayScene extends Phaser.Scene {
         const seal = this.add.rectangle(cx + 230, 160, 86, 86, 0xb8322b).setStrokeStyle(3, 0x6e1b18).setAngle(-8);
         this.layer.add(seal);
         this.layer.add(txt(this, seal.x, seal.y, '돌파', 28, '#f6e7c8', { title: true }).setOrigin(0.5).setAngle(-8));
-        this.layer.add(txt(this, cx, 160, `월하산맥 ${item.stageId} 돌파!`, 38, COLORS.text, { title: true }).setOrigin(0.5));
+        this.layer.add(txt(this, cx, 160, `${item.region ?? '월하산맥'} ${item.stageId} 돌파!`, 38, COLORS.text, { title: true }).setOrigin(0.5));
+        // 별 ★★★ (돌파 · 보물 상자 모두 · 쓰러지지 않고)
+        const stars = item.stars ?? 1;
+        for (let k = 0; k < 3; k++) {
+          const on = k < stars;
+          const sTxt = txt(this, cx - 54 + k * 54, 206, '★', 44, on ? '#ffcf4a' : '#8a8090', { stroke: '#5a3a10', strokeThickness: on ? 4 : 2 }).setOrigin(0.5).setScale(0.2);
+          this.layer.add(sTxt);
+          this.tweens.add({ targets: sTxt, scale: 1, duration: 260, delay: 250 + k * 220, ease: 'Back.out' });
+        }
+        this.layer.add(txt(this, cx, 240, '★ 돌파 · ★ 보물 상자 모두 · ★ 쓰러지지 않고', 15, '#7a5a3a').setOrigin(0.5));
         const lines = [
           `소요 시간  ${item.time.toFixed(1)}초`,
           `처치한 몬스터  ${item.defeats}`,
@@ -176,7 +186,7 @@ export class OverlayScene extends Phaser.Scene {
           `영물 경험치  +${item.exp}${item.first ? '' : ' (재도전)'}`,
           `금화  +${item.gold}`,
         ];
-        lines.forEach((l, i) => this.layer.add(txt(this, cx - 200, 230 + i * 44, l, 24, '#3a2a2a')));
+        lines.forEach((l, i) => this.layer.add(txt(this, cx - 200, 268 + i * 44, l, 22, '#3a2a2a')));
         const w = this.world;
         if (item.next) this.layer.add(button(this, cx - 120, 520, 220, 60, '다음 구간 ▶', () => { this.layer.removeAll(true); this.busy = false; this.pausedWorld = false; w.afterClear(true); }, 'primary', 22));
         this.layer.add(button(this, item.next ? cx + 120 : cx, 520, 200, 60, '지도로', () => { this.layer.removeAll(true); this.busy = false; this.pausedWorld = false; w.afterClear(false); }, item.next ? 'normal' : 'primary', 22));
@@ -206,9 +216,11 @@ export class OverlayScene extends Phaser.Scene {
       case 'purified': {
         this.dim(0.5);
         this.rays();
-        this.layer.add(txt(this, cx, GAME_H / 2 - 60, '흑운 산군이 정화되었다!', 44, '#fff3c6', { title: true, stroke: '#1d1a2b', strokeThickness: 8 }).setOrigin(0.5));
-        this.layer.add(txt(this, cx, GAME_H / 2, '월하산맥에 달빛이 돌아왔다. 수호신은 고마움의 표시로 영기석을 남겼다.', 20, '#f6ead0', { stroke: '#1d1a2b', strokeThickness: 4 }).setOrigin(0.5));
-        this.layer.add(txt(this, cx, GAME_H / 2 + 36, '영기석 +8 · 월하 꽃잎 +5 · 금화 +300 — 홍살문으로 나아가자', 18, '#ffe6a6').setOrigin(0.5));
+        const nm = item.name ?? '흑운 산군', rg = item.region ?? '월하산맥';
+        this.layer.add(txt(this, cx, GAME_H / 2 - 60, `${nm}이(가) 정화되었다!`, 44, '#fff3c6', { title: true, stroke: '#1d1a2b', strokeThickness: 8 }).setOrigin(0.5));
+        const gName = item.guardian ? MOUNTS[item.guardian as MountId]?.name : null;
+        this.layer.add(txt(this, cx, GAME_H / 2, gName ? `${rg}에 빛이 돌아왔다. 정화된 ${gName}이(가) 동료가 되고 싶어 한다!` : `${rg}에 빛이 돌아왔다. 수호신은 고마움의 표시로 영기석을 남겼다.`, 20, '#f6ead0', { stroke: '#1d1a2b', strokeThickness: 4 }).setOrigin(0.5));
+        this.layer.add(txt(this, cx, GAME_H / 2 + 36, `${item.reward ?? '영기석 +8 · 월하 꽃잎 +5 · 금화 +300'} — 홍살문으로 나아가자`, 18, '#ffe6a6').setOrigin(0.5));
         this.layer.add(button(this, cx, GAME_H / 2 + 120, 200, 58, '확인', () => this.done(), 'primary', 22));
         break;
       }

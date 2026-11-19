@@ -715,3 +715,40 @@ export function paintRainStreak(): HTMLCanvasElement {
   ctx.fillRect(2, 0, 2, 48);
   return c;
 }
+
+/** 원형 방향키 받침: 옻칠 먹색 원판 + 이중 금테 + 네 방향 표시 + 구름 문양 */
+export function paintJoystickBase(): HTMLCanvasElement {
+  const S = 220, c0 = S / 2;
+  const [c, ctx] = makeCanvas(S, S);
+  const g = ctx.createRadialGradient(c0 - 20, c0 - 24, 10, c0, c0, 100);
+  g.addColorStop(0, 'rgba(62,56,92,0.9)'); g.addColorStop(1, 'rgba(16,14,28,0.88)');
+  circle(ctx, c0, c0, 98, g, '#e2b14c', 4);
+  ctx.strokeStyle = 'rgba(122,90,30,0.9)'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(c0, c0, 104, 0, TAU); ctx.stroke();
+  ctx.strokeStyle = 'rgba(255,241,196,0.55)'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(c0, c0, 90, 0, TAU); ctx.stroke();
+  ctx.strokeStyle = 'rgba(226,177,76,0.35)'; ctx.lineWidth = 1.2; ctx.beginPath(); ctx.arc(c0, c0, 52, 0, TAU); ctx.stroke();
+  // 네 방향 화살 (좌우는 크게)
+  const tri = (ang: number, r: number, size: number, a: number) => {
+    ctx.save(); ctx.translate(c0 + Math.cos(ang) * r, c0 + Math.sin(ang) * r); ctx.rotate(ang);
+    ctx.beginPath(); ctx.moveTo(size, 0); ctx.lineTo(-size * 0.6, -size * 0.8); ctx.lineTo(-size * 0.6, size * 0.8); ctx.closePath();
+    ctx.fillStyle = `rgba(246,234,208,${a})`; ctx.fill(); ctx.strokeStyle = 'rgba(122,90,30,0.9)'; ctx.lineWidth = 1.5; ctx.stroke(); ctx.restore();
+  };
+  tri(0, 74, 13, 0.95); tri(Math.PI, 74, 13, 0.95); tri(-Math.PI / 2, 74, 9, 0.6); tri(Math.PI / 2, 74, 9, 0.6);
+  // 금빛 구름 장식 (참고 화면 버튼 받침)
+  cloudSwirl(ctx, 34, 196, 0.9, 'rgba(226,177,76,0.25)', 'rgba(226,177,76,0.9)', true, 1.4);
+  cloudSwirl(ctx, 186, 196, 0.9, 'rgba(226,177,76,0.25)', 'rgba(226,177,76,0.9)', false, 1.4);
+  return c;
+}
+
+/** 원형 방향키 손잡이: 금테 원판 + 태극 빛 소용돌이 */
+export function paintJoystickKnob(): HTMLCanvasElement {
+  const S = 104, c0 = S / 2;
+  const [c, ctx] = makeCanvas(S, S);
+  glow(ctx, c0, c0, 50, '#ffe08a', 0.35);
+  const g = ctx.createRadialGradient(c0 - 12, c0 - 14, 4, c0, c0, 44);
+  g.addColorStop(0, '#fff3d0'); g.addColorStop(0.55, '#e8c78a'); g.addColorStop(1, '#9a6a2a');
+  circle(ctx, c0, c0, 40, g, '#7a5a1e', 3);
+  ctx.strokeStyle = 'rgba(255,255,255,0.7)'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(c0, c0, 34, 0, TAU); ctx.stroke();
+  spiral(ctx, c0, c0, 22, 1.5, '#c3352c', 4, 0);
+  spiral(ctx, c0, c0, 22, 1.5, '#2f5fae', 4, Math.PI);
+  return c;
+}

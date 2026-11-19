@@ -69,4 +69,18 @@ export const MONSTER_ART: Record<string, MonsterArt> = {
   },
 };
 
+const bossArt = (file: string, w: number, h: number, rig: string, motion: MotionKind, displayH: number): MonsterArt => ({
+  file, w, h, rig, motion, displayH,
+  frames: { idle: 8, run: 8, fly: 8, atk: 4 },
+  anims: { ...quadAnims('atk', 10), cast: { from: 'atk', fps: 6, repeat: 0 }, fall: { from: 'fly', fps: 10, repeat: -1 } },
+});
+// 지역 수호 영물 보스 (부팅 때가 아니라 그 구간에 들어갈 때 준비)
+Object.assign(MONSTER_ART, {
+  boss_girin: bossArt('assets/monsters/boss_girin.png', 273, 199, 'girin_2', 'quad', 250),
+  boss_hyeonmu: bossArt('assets/monsters/boss_hyeonmu.png', 313, 180, 'hyeonmu_2', 'shell', 220),
+  boss_haetae: bossArt('assets/monsters/boss_haetae.png', 327, 193, 'haetae_2', 'quad', 236),
+  boss_bonghwang: bossArt('assets/monsters/boss_bonghwang.png', 270, 236, 'bonghwang_2', 'bird', 270),
+  boss_dragon: bossArt('assets/monsters/boss_dragon.png', 304, 197, 'cheongryong_2', 'serpent', 250),
+});
+
 export const monsterImageKey = (id: string) => `monimg_${id}`;

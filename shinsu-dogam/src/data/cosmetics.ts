@@ -2,7 +2,7 @@
 import type { CosmeticDef } from './types.ts';
 
 export const COSMETICS: Record<string, CosmeticDef> = {
-  // 영물 스킨 (현재 빌드: 늑대·매·청룡)
+  // 영물 스킨
   skin_cheongryong_maehwa: { id: 'skin_cheongryong_maehwa', kind: 'skin', name: '매화 청룡', mount: 'cheongryong', tint: { hue: 140, sat: 0.9, light: 1.06 } },
   skin_cheongryong_gold: { id: 'skin_cheongryong_gold', kind: 'skin', name: '황금 청룡', mount: 'cheongryong', tint: { hue: -150, sat: 1.25, light: 1.05 } },
   skin_cheongryong_moon: { id: 'skin_cheongryong_moon', kind: 'skin', name: '월광 청룡', mount: 'cheongryong', tint: { hue: 40, sat: 0.55, light: 1.1 } },
@@ -10,6 +10,15 @@ export const COSMETICS: Record<string, CosmeticDef> = {
   skin_wolf_obsidian: { id: 'skin_wolf_obsidian', kind: 'skin', name: '흑요 늑대', mount: 'wolf', tint: { hue: 0, sat: 0.35, light: 0.58 } },
   skin_hawk_ruby: { id: 'skin_hawk_ruby', kind: 'skin', name: '홍옥 매', mount: 'hawk', tint: { hue: -30, sat: 1.5, light: 1.0 } },
   skin_hawk_indigo: { id: 'skin_hawk_indigo', kind: 'skin', name: '청람 매', mount: 'hawk', tint: { hue: 180, sat: 1.2, light: 1.0 } },
+  skin_wolf_moon: { id: 'skin_wolf_moon', kind: 'skin', name: '월광 늑대 (수행록)', mount: 'wolf', tint: { hue: 40, sat: 0.5, light: 1.12 } },
+  // 새로 동료가 되는 영물 스킨
+  skin_baekho_snow: { id: 'skin_baekho_snow', kind: 'skin', name: '설산 백호', mount: 'baekho', tint: { hue: 25, sat: 0.6, light: 1.08 } },
+  skin_baekho_moon: { id: 'skin_baekho_moon', kind: 'skin', name: '월광 백호 (수행록 한정)', mount: 'baekho', tint: { hue: 60, sat: 1.3, light: 1.04 } },
+  skin_jujak_lotus: { id: 'skin_jujak_lotus', kind: 'skin', name: '홍련 주작', mount: 'jujak', tint: { hue: -25, sat: 1.1, light: 1.08 } },
+  skin_bonghwang_five: { id: 'skin_bonghwang_five', kind: 'skin', name: '오색 봉황', mount: 'bonghwang', tint: { hue: 120, sat: 1.3, light: 1.04 } },
+  skin_hyeonmu_jade: { id: 'skin_hyeonmu_jade', kind: 'skin', name: '청옥 현무', mount: 'hyeonmu', tint: { hue: 30, sat: 1.25, light: 1.08 } },
+  skin_girin_sakura: { id: 'skin_girin_sakura', kind: 'skin', name: '벚꽃 기린', mount: 'girin', tint: { hue: 150, sat: 0.9, light: 1.1 } },
+  skin_haetae_gold: { id: 'skin_haetae_gold', kind: 'skin', name: '황금 해태', mount: 'haetae', tint: { hue: -170, sat: 1.2, light: 1.06 } },
   // 장식
   decor_knot: { id: 'decor_knot', kind: 'decor', name: '전통 매듭', slot: 'neck', color: '#c8352e' },
   decor_jade: { id: 'decor_jade', kind: 'decor', name: '옥 장식', slot: 'neck', color: '#4fb39a' },

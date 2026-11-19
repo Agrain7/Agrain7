@@ -16,10 +16,11 @@ import { audio } from '../../systems/audio.ts';
 import { payments } from '../../services/payment/PaymentService.ts';
 import { analytics } from '../../services/analytics/Analytics.ts';
 import { overlayQueue } from '../overlayQueue.ts';
+import * as L from '../../systems/live.ts';
 import type { WorldScene } from './WorldScene.ts';
 
-type Tab = 'stable' | 'codex' | 'quests' | 'inventory' | 'shop' | 'settings';
-const TABS: [Tab, string][] = [['stable', '영물'], ['codex', '도감'], ['quests', '퀘스트'], ['inventory', '소지품'], ['shop', '상점'], ['settings', '설정']];
+type Tab = 'stable' | 'codex' | 'daily' | 'pass' | 'expedition' | 'quests' | 'inventory' | 'shop' | 'settings';
+const TABS: [Tab, string][] = [['stable', '영물'], ['codex', '도감'], ['daily', '일일'], ['pass', '수행록'], ['expedition', '원정'], ['quests', '퀘스트'], ['inventory', '소지품'], ['shop', '상점'], ['settings', '설정']];
 const X0 = 50, Y0 = 34, W = GAME_W - 100, H = GAME_H - 68;
 
 export class MenuScene extends Phaser.Scene {
@@ -31,6 +32,8 @@ export class MenuScene extends Phaser.Scene {
   private codexSel: MountId | null = null;
   private shopCat: ProductCategory = 'skin';
   private scrollY = 0;
+  private passPage = 0;
+  private dots!: Phaser.GameObjects.Container;
 
   constructor() {
     super('Menu');
@@ -48,10 +51,15 @@ export class MenuScene extends Phaser.Scene {
     this.add.rectangle(0, 0, GAME_W, GAME_H, 0x0b0912, 0.6).setOrigin(0).setInteractive();
     panel(this, X0, Y0, W, H);
     this.tabBtns = TABS.map(([t, label], i) => {
-      const b = button(this, X0 + 110 + i * 150, Y0 + 40, 140, 48, label, () => this.switchTab(t), t === this.tab ? 'primary' : 'normal', 19);
+      const b = button(this, X0 + 76 + i * 112, Y0 + 40, 104, 46, label, () => this.switchTab(t), t === this.tab ? 'primary' : 'normal', 17);
       return b;
     });
-    button(this, X0 + W - 90, Y0 + 40, 140, 48, this.from === 'World' ? '계속하기' : '닫기', () => this.close(), 'primary', 19);
+    button(this, X0 + W - 62, Y0 + 40, 108, 46, this.from === 'World' ? '계속하기' : '닫기', () => this.close(), 'primary', 17);
+    // 빨간 점 (받을 보상)
+    this.dots = this.add.container(0, 0).setDepth(5);
+    this.drawDots();
+    // 원정 남은 시간 갱신
+    this.time.addEvent({ delay: 1000, loop: true, callback: () => { if (this.tab === 'expedition' || this.tab === 'daily') this.render(); } });
     if (this.from === 'World') button(this, X0 + W - 90, Y0 + H - 36, 160, 44, '지도로 나가기', () => {
       confirmBox(this, '이 구간을 그만두고 지도로 나갈까요?\n(획득한 경험치·아이템은 저장됩니다)', () => {
         store.state.save();
@@ -107,7 +115,11 @@ export class MenuScene extends Phaser.Scene {
       case 'inventory': this.renderInventory(c); break;
       case 'shop': this.renderShop(c); break;
       case 'settings': this.renderSettings(c); break;
+      case 'daily': this.renderDaily(c); break;
+      case 'pass': this.renderPass(c); break;
+      case 'expedition': this.renderExpedition(c); break;
     }
+    this.drawDots();
   }
 
   private t(c: Phaser.GameObjects.Container, x: number, y: number, s: string, size = 18, color: string = COLORS.text, opts: Parameters<typeof txt>[6] = {}) {
@@ -162,7 +174,7 @@ export class MenuScene extends Phaser.Scene {
     this.t(c, dx + 20, Y0 + 496, `이동: ${sd.abilities.join(' · ')}`, 15, '#3a2a2a', { wordWrap: { width: 470 } });
     // 오른쪽: 행동
     const rx = X0 + 800;
-    if (m.id !== st.data.activeMount) c.add(button(this, rx + 150, Y0 + 110, 260, 52, '이 영물에 탑승', () => { st.setActive(m.id); st.save(); this.render(); }, 'primary'));
+    if (m.id !== st.data.activeMount) c.add(button(this, rx + 150, Y0 + 110, 260, 52, st.data.expeditions[m.id] ? '원정 중 (원정 탭)' : '이 영물에 탑승', () => { if (!st.setActive(m.id)) { toast(this, '원정 중인 영물은 돌아온 뒤에 탈 수 있어요'); return; } st.save(); this.render(); }, 'primary'));
     else this.t(c, rx + 150, Y0 + 110, '현재 탑승 중', 20, '#c3352c', { title: true }).setOrigin(0.5);
     // 진화
     const ce = st.canEvolve(m.id);
@@ -280,6 +292,185 @@ export class MenuScene extends Phaser.Scene {
   }
 
   // ---------------- 퀘스트 ----------------
+  // ---------------- 빨간 점 ----------------
+  private drawDots() {
+    if (!this.dots) return;
+    this.dots.removeAll(true);
+    const st = store.state;
+    const cl = L.claimables(st);
+    const quest = QUESTS.some((q) => st.data.quests[q.id]?.done && !st.data.quests[q.id]?.claimed) ? 1 : 0;
+    const n: Partial<Record<Tab, number>> = { daily: cl.daily, pass: cl.pass, expedition: cl.expedition, quests: quest };
+    TABS.forEach(([t], i) => {
+      if (!n[t]) return;
+      const x = X0 + 76 + i * 112 + 44, y = Y0 + 22;
+      this.dots.add(this.add.circle(x, y, 8, 0xd63c34).setStrokeStyle(2, 0xffffff));
+    });
+  }
+
+  private rewardText(r: L.Reward) {
+    return L.rewardLabel(r, (id) => ITEMS[id]?.name ?? COSMETICS[id]?.name ?? id);
+  }
+
+  // ---------------- 일일: 출석 · 오늘의 임무 · 달빛 정기권 ----------------
+  private renderDaily(c: Phaser.GameObjects.Container) {
+    const st = store.state;
+    L.ensureDaily(st);
+    this.t(c, X0 + 40, Y0 + 82, '출석 (7일)', 28, COLORS.text, { title: true });
+    this.t(c, X0 + 220, Y0 + 92, '하루 한 번 접속해 받기 · 빠진 날이 있어도 이어서', 15, '#7a5a3a');
+    const can = L.canClaimLogin(st);
+    const cur = st.data.daily.loginDays % 7;
+    L.LOGIN_REWARDS.forEach((r, i) => {
+      const x = X0 + 40 + i * 156, y = Y0 + 130;
+      const got = i < cur, today = i === cur;
+      c.add(this.add.rectangle(x, y, 146, 132, got ? 0xe6dcc6 : today && can ? 0xfff2c8 : 0xf6ecd6).setOrigin(0).setStrokeStyle(today && can ? 4 : 2, today && can ? 0xe2b14c : 0xb89466));
+      this.t(c, x + 73, y + 16, `${i + 1}일째`, 18, i === 6 ? '#c3352c' : COLORS.text, { title: true }).setOrigin(0.5, 0);
+      this.t(c, x + 73, y + 50, this.rewardText(r), 14, '#3a2a2a', { align: 'center', wordWrap: { width: 132 } }).setOrigin(0.5, 0);
+      if (got) this.t(c, x + 73, y + 104, '✓ 받음', 15, '#2f8a7a').setOrigin(0.5, 0);
+    });
+    const lb = button(this, X0 + W - 150, Y0 + 92, 220, 44, can ? '오늘 출석 보상 받기' : '내일 또 만나요', () => {
+      if (L.claimLogin(st) >= 0) { st.save(); audio.play('chest'); toast(this, '출석 보상을 받았어요!'); }
+      this.render();
+    }, 'primary', 17);
+    lb.setEnabled(can);
+    c.add(lb);
+
+    // 오늘의 임무
+    const my = Y0 + 290;
+    this.t(c, X0 + 40, my, '오늘의 임무', 26, COLORS.text, { title: true });
+    this.t(c, X0 + 220, my + 8, '자정에 새 임무 · 하나마다 금화 120 + 수행록 경험 100', 15, '#7a5a3a');
+    st.data.daily.missions.forEach((m, i) => {
+      const def = L.MISSIONS.find((x) => x.id === m.id)!;
+      const y = my + 48 + i * 56;
+      const prog = L.missionProgress(st, m);
+      c.add(this.add.rectangle(X0 + 40, y, 760, 48, 0xf6ecd6).setOrigin(0).setStrokeStyle(2, 0xb89466));
+      this.t(c, X0 + 56, y + 12, `${m.claimed ? '✓' : prog >= def.target ? '★' : '·'} ${def.name}`, 18, COLORS.text, { title: true });
+      this.t(c, X0 + 230, y + 15, def.desc, 15, '#5a4a3a');
+      const b = bar(this, X0 + 470, y + 18, 180, 12, COLORS.exp);
+      b.set(prog / def.target);
+      c.add(b.g);
+      this.t(c, X0 + 660, y + 13, `${prog}/${def.target}`, 15, '#3a2a2a');
+      if (!m.claimed && prog >= def.target) c.add(button(this, X0 + 740, y + 24, 100, 36, '받기', () => { L.claimMission(st, m.id); st.save(); audio.play('chest'); this.render(); }, 'primary', 15));
+    });
+    const by = my + 48 + 3 * 56 + 4;
+    this.t(c, X0 + 56, by + 6, `모두 완료 보너스 — ${this.rewardText(L.MISSION_BONUS)} + 수행록 경험 150`, 16, '#7a5a3a');
+    if (L.canClaimBonus(st)) c.add(button(this, X0 + 740, by + 14, 100, 36, '받기', () => { L.claimBonus(st); st.save(); audio.play('chest'); this.render(); }, 'primary', 15));
+    else if (st.data.daily.bonusClaimed) this.t(c, X0 + 712, by + 6, '✓ 받음', 15, '#2f8a7a');
+
+    // 달빛 정기권
+    const px = X0 + 840, py = Y0 + 290;
+    c.add(this.add.rectangle(px, py, 300, 250, 0x2a2440).setOrigin(0).setStrokeStyle(3, 0xe2b14c));
+    this.t(c, px + 150, py + 16, '달빛 정기권', 24, '#ffe6a6', { title: true }).setOrigin(0.5, 0);
+    const active = L.monthlyActive(st);
+    this.t(c, px + 150, py + 56, active ? `남은 기간 ${L.monthlyDaysLeft(st)}일` : '30일 동안 매일 접속하면', 16, '#f6ead0').setOrigin(0.5, 0);
+    this.t(c, px + 150, py + 84, `매일 ${this.rewardText(L.MONTHLY.daily)}`, 17, '#ffe6a6', { title: true }).setOrigin(0.5, 0);
+    this.t(c, px + 150, py + 114, active ? '오늘 받을 수 있어요' : `구매 즉시 ${this.rewardText(L.MONTHLY.instant)}`, 14, '#c8c0d8').setOrigin(0.5, 0);
+    if (active) {
+      const mb = button(this, px + 150, py + 196, 200, 46, L.canClaimMonthly(st) ? '오늘 몫 받기' : '✓ 오늘 받음', () => { if (L.claimMonthly(st)) { st.save(); audio.play('chest'); } this.render(); }, 'primary', 17);
+      mb.setEnabled(L.canClaimMonthly(st));
+      c.add(mb);
+    } else c.add(button(this, px + 150, py + 196, 200, 46, '4,900원 · 상점에서 보기', () => { this.shopCat = 'pass'; this.switchTab('shop'); }, 'primary', 16));
+  }
+
+  // ---------------- 영물 수행록 (시즌 패스) ----------------
+  private renderPass(c: Phaser.GameObjects.Container) {
+    const st = store.state;
+    const p = st.data.pass;
+    const lv = L.passLevel(p.xp);
+    this.t(c, X0 + 40, Y0 + 82, L.PASS.name, 26, COLORS.text, { title: true });
+    this.t(c, X0 + 40, Y0 + 120, `${lv} / ${L.PASS.levels} 단계`, 22, '#c3352c', { title: true });
+    const xpIn = lv >= L.PASS.levels ? L.PASS.xpPerLevel : p.xp - lv * L.PASS.xpPerLevel;
+    const b = bar(this, X0 + 200, Y0 + 128, 320, 14, COLORS.exp);
+    b.set(xpIn / L.PASS.xpPerLevel);
+    c.add(b.g);
+    this.t(c, X0 + 530, Y0 + 122, `${xpIn} / ${L.PASS.xpPerLevel}`, 15, '#5a4a3a');
+    this.t(c, X0 + 40, Y0 + 152, '경험: 구간 돌파 120(재도전 60) · 보스 정화 300 · 일일 임무 100 · 출석 50', 14, '#7a5a3a');
+    if (!p.premium) c.add(button(this, X0 + W - 170, Y0 + 124, 300, 50, '프리미엄 열기 · 9,900원', () => this.buy('p_pass_premium'), 'primary', 18));
+    else this.t(c, X0 + W - 300, Y0 + 116, '★ 프리미엄 열림', 22, '#c3352c', { title: true });
+    const all = button(this, X0 + W - 170, Y0 + 184, 160, 40, '모두 받기', () => {
+      let n = 0;
+      for (let i = 1; i <= lv; i++) { if (L.claimPass(st, 'free', i)) n++; if (L.claimPass(st, 'prem', i)) n++; }
+      if (n) { st.save(); audio.play('chest'); toast(this, `보상 ${n}개를 받았어요`); }
+      this.render();
+    }, 'normal', 16);
+    all.setEnabled(L.passClaimable(st) > 0);
+    c.add(all);
+    // 10단계씩
+    const pages = Math.ceil(L.PASS.levels / 10);
+    this.passPage = Math.min(this.passPage, pages - 1);
+    const y0 = Y0 + 220;
+    this.t(c, X0 + 40, y0 + 52, '무료', 18, COLORS.text, { title: true });
+    this.t(c, X0 + 40, y0 + 186, '프리미엄', 18, '#c3352c', { title: true });
+    for (let k = 0; k < 10; k++) {
+      const L1 = this.passPage * 10 + k + 1;
+      const x = X0 + 130 + k * 104;
+      const reached = L1 <= lv;
+      this.t(c, x + 48, y0, `${L1}`, 18, reached ? '#c3352c' : '#8a7a6a', { title: true }).setOrigin(0.5, 0);
+      for (const [track, ty] of [['free', y0 + 30], ['prem', y0 + 162]] as const) {
+        const r = track === 'free' ? L.passFree(L1) : L.passPremium(L1);
+        const got = (track === 'free' ? p.free : p.prem).includes(L1);
+        const locked = track === 'prem' && !p.premium;
+        c.add(this.add.rectangle(x, ty, 96, 122, got ? 0xe6dcc6 : r.cosmetics ? 0xfff0d0 : 0xf6ecd6).setOrigin(0).setStrokeStyle(r.cosmetics ? 3 : 2, r.cosmetics ? 0xc3352c : 0xb89466));
+        this.t(c, x + 48, ty + 10, this.rewardText(r), 12, locked ? '#9a8a7a' : '#3a2a2a', { align: 'center', wordWrap: { width: 88 } }).setOrigin(0.5, 0);
+        if (got) this.t(c, x + 48, ty + 92, '✓', 18, '#2f8a7a').setOrigin(0.5, 0);
+        else if (locked) this.t(c, x + 48, ty + 92, '🔒', 16, '#7a5a3a').setOrigin(0.5, 0);
+        else if (reached) c.add(button(this, x + 48, ty + 102, 80, 30, '받기', () => { if (L.claimPass(st, track, L1)) { st.save(); audio.play('chest'); } this.render(); }, 'primary', 14));
+      }
+    }
+    const pb = (d: number, label: string, x: number) => {
+      const bb = button(this, x, Y0 + H - 40, 120, 40, label, () => { this.passPage += d; this.render(); }, 'normal', 16);
+      bb.setEnabled(this.passPage + d >= 0 && this.passPage + d < pages);
+      c.add(bb);
+    };
+    pb(-1, '◀ 이전', X0 + W / 2 - 140);
+    this.t(c, X0 + W / 2, Y0 + H - 52, `${this.passPage * 10 + 1}~${this.passPage * 10 + 10} 단계`, 16, '#5a4a3a').setOrigin(0.5, 0);
+    pb(1, '다음 ▶', X0 + W / 2 + 140);
+  }
+
+  // ---------------- 영물 원정 ----------------
+  private renderExpedition(c: Phaser.GameObjects.Container) {
+    const st = store.state;
+    this.t(c, X0 + 40, Y0 + 82, '영물 원정', 28, COLORS.text, { title: true });
+    this.t(c, X0 + 200, Y0 + 92, `쉬고 있는 영물을 원정 보내면, 게임을 꺼 두어도 시간이 지나 금화·영기석·경험치를 가져와요 (동시에 ${L.MAX_EXPEDITIONS}마리)`, 15, '#7a5a3a');
+    const owned = st.ownedMounts();
+    owned.forEach((m, i) => {
+      const col = i % 3, row = Math.floor(i / 3);
+      const x = X0 + 30 + col * 380, y = Y0 + 130 + row * 168;
+      const def = MOUNTS[m.id];
+      const e = st.data.expeditions[m.id];
+      c.add(this.add.rectangle(x, y, 366, 156, e ? 0xece4f4 : 0xf6ecd6).setOrigin(0).setStrokeStyle(2, 0xb89466));
+      this.portrait(c, m.id, m.stage, x + 70, y + 118, 120, 96, 'normal', m.skin);
+      this.t(c, x + 140, y + 10, `${def.name}  Lv.${m.level}`, 19, COLORS.text, { title: true });
+      if (e) {
+        const left = L.expeditionLeftMs(st, m.id);
+        const ex = L.EXPEDITIONS.find((x2) => x2.hours === e.hours);
+        this.t(c, x + 140, y + 42, `원정 중 · ${ex?.name ?? ''} (${e.hours}시간)`, 15, '#5a4a7a');
+        if (left > 0) {
+          const hh = Math.floor(left / 3600_000), mm = Math.floor((left % 3600_000) / 60_000), ss = Math.floor((left % 60_000) / 1000);
+          this.t(c, x + 140, y + 70, `남은 시간 ${hh}:${String(mm).padStart(2, '0')}:${String(ss).padStart(2, '0')}`, 20, '#3a2a2a', { title: true });
+        } else {
+          const r = L.expeditionReward(m.level, e.hours);
+          this.t(c, x + 140, y + 70, `돌아왔어요! 금화 ${r.gold} · 영기석 ${r.stones} · 경험 ${r.exp}`, 14, '#2f8a7a', { wordWrap: { width: 220 } });
+          c.add(button(this, x + 290, y + 128, 120, 38, '보상 받기', () => {
+            const got = L.claimExpedition(st, m.id);
+            if (got) { st.save(); audio.play('chest'); toast(this, `${def.name}이(가) 돌아왔다! 금화 ${got.gold} · 영기석 ${got.stones}`); }
+            this.render();
+          }, 'primary', 15));
+        }
+      } else {
+        const why = L.canStartExpedition(st, m.id);
+        this.t(c, x + 140, y + 40, why ?? '어디로 보낼까요?', 14, why ? '#9a5a4a' : '#5a4a3a', { wordWrap: { width: 220 } });
+        if (!why) L.EXPEDITIONS.forEach((ex, k) => {
+          const r = L.expeditionReward(m.level, ex.hours);
+          c.add(button(this, x + 172 + k * 70, y + 92, 64, 40, `${ex.hours}시간`, () => {
+            if (L.startExpedition(st, m.id, ex.hours)) { st.save(); audio.play('select'); toast(this, `${def.name} 원정 출발! (${ex.name})`); }
+            this.render();
+          }, 'normal', 14));
+          if (k === 2) this.t(c, x + 140, y + 122, `8시간: 금화 ${r.gold} · 영기석 ${r.stones}`, 12, '#7a5a3a');
+        });
+      }
+    });
+  }
+
   private renderQuests(c: Phaser.GameObjects.Container) {
     const st = store.state;
     this.t(c, X0 + 40, Y0 + 82, '퀘스트', 30, COLORS.text, { title: true });
@@ -329,8 +520,8 @@ export class MenuScene extends Phaser.Scene {
     this.t(c, X0 + 40, Y0 + 82, '상점', 30, COLORS.text, { title: true });
     const banner = this.add.rectangle(X0 + 160, Y0 + 84, 700, 34, 0x3c3550).setOrigin(0).setStrokeStyle(2, 0xe2b14c);
     c.add(banner);
-    this.t(c, X0 + 176, Y0 + 90, `테스트 모드 · 실제 결제가 이루어지지 않습니다 (결제 연동 전)  ·  모든 상품은 외형 전용`, 15, '#ffe6a6');
-    const cats: [ProductCategory, string][] = [['skin', '영물 스킨'], ['decor', '영물 장식'], ['outfit', '라이더 의상'], ['package', '패키지'], ['pass', '탐험 패스']];
+    this.t(c, X0 + 176, Y0 + 90, `테스트 모드 · 실제 결제가 이루어지지 않습니다 (결제 연동 전)  ·  뽑기(확률형) 없음 · 정해진 보상만`, 15, '#ffe6a6');
+    const cats: [ProductCategory, string][] = [['skin', '영물 스킨'], ['decor', '영물 장식'], ['outfit', '라이더 의상'], ['package', '패키지'], ['pass', '수행록·정기권']];
     cats.forEach(([k, label], i) => {
       c.add(button(this, X0 + 100 + i * 150, Y0 + 150, 140, 42, label, () => { this.shopCat = k; this.scrollY = 0; this.render(); }, this.shopCat === k ? 'primary' : 'normal', 16));
     });
@@ -339,7 +530,7 @@ export class MenuScene extends Phaser.Scene {
       const col = i % 3, row = Math.floor(i / 3);
       const x = X0 + 30 + col * 300, y = Y0 + 190 + row * 196 - this.scrollY;
       if (y < Y0 + 170 || y > Y0 + H - 150) return;
-      const ownedAll = p.grants.length > 0 && p.grants.every((g) => st.ownsCosmetic(g));
+      const ownedAll = (p.grants.length > 0 && p.grants.every((g) => st.ownsCosmetic(g))) || (p.effect === 'pass_premium' && st.data.pass.premium);
       const bought = p.oncePerAccount && st.data.purchases.some((x) => x.productId === p.id && x.status === 'paid');
       c.add(this.add.rectangle(x, y, 286, 184, p.available ? 0xf6ecd6 : 0xe2dacb).setOrigin(0).setStrokeStyle(2, p.tier === '프리미엄' ? 0xc3352c : 0xb89466));
       // 미리보기
@@ -405,6 +596,8 @@ export class MenuScene extends Phaser.Scene {
       const res = await payments.pay(order);
       if (res.ok) {
         st.grantCosmetics(p.grants);
+        if (p.effect === 'pass_premium') st.data.pass.premium = true;
+        if (p.effect === 'monthly') L.activateMonthly(st);
         st.data.purchases.push({ orderId: order.orderId, productId: p.id, price: p.price, at: Date.now(), test: res.test, status: 'paid' });
         const eq = st.autoEquip(p.grants);
         for (const g of eq.equipped) if (COSMETICS[g]?.kind === 'outfit') ensureRider(this, g);
@@ -413,7 +606,8 @@ export class MenuScene extends Phaser.Scene {
         analytics.track('purchase_success', { product: p.id, price: p.price, test: res.test });
         audio.play('chest');
         this.render();
-        this.purchaseDone(p.name, eq);
+        if (p.effect) toast(this, p.effect === 'pass_premium' ? '수행록 프리미엄이 열렸어요! 수행록 탭에서 보상을 받으세요' : '달빛 정기권 시작! 영기석 10 지급 · 일일 탭에서 매일 받기', '#ffe6a6', 120, 3200);
+        else this.purchaseDone(p.name, eq);
       } else toast(this, res.message ?? '결제 실패', '#ffb0a0', 120);
     }, '테스트 구매');
   }
@@ -475,7 +669,7 @@ export class MenuScene extends Phaser.Scene {
       c.add(button(this, X0 + 360 + i * 110, Y0 + 272, 100, 42, m === 'auto' ? '자동' : m === 'on' ? '켜기' : '끄기', () => { s.touch = m; this.apply(); }, s.touch === m ? 'primary' : 'normal', 16));
     });
     this.t(c, X0 + 60, Y0 + 330, '조작법', 20, COLORS.text, { title: true });
-    this.t(c, X0 + 60, Y0 + 362, 'PC: A/D·←→ 이동 · Space 점프(길게: 높이/활공) · J 공격 · K 특수 기술 · L 돌진\nQ 영물 교체 · Esc 메뉴 · 비행 중: Space/W 상승, S 하강\n모바일: 화면 왼쪽 ←→, 오른쪽 점프·공격·기술·돌진 버튼', 15, '#3a2a2a', { lineSpacing: 6 });
+    this.t(c, X0 + 60, Y0 + 362, 'PC: A/D·←→ 이동 · Space 점프(길게: 높이/활공) · Z 공격 · X 돌진 · C 기술 · V 필살기\nQ 영물 교체 · Esc 메뉴 · 비행 중: Space/W 상승, S 하강\n모바일: 왼쪽 원형 방향키, 오른쪽 점프·공격·기술·필살기·돌진 버튼', 15, '#3a2a2a', { lineSpacing: 6 });
     this.t(c, X0 + 60, Y0 + 450, `저장: 이 브라우저에 자동 저장됨 (${new Date(st.data.updatedAt).toLocaleString('ko-KR')}) · 총 플레이 ${Math.round(st.data.playTimeSec / 60)}분`, 14, '#5a4a3a');
     c.add(button(this, X0 + 160, Y0 + 510, 200, 46, '진행 초기화', () => {
       confirmBox(this, '모든 진행 상황을 지울까요?\n(되돌릴 수 없습니다)', () => {

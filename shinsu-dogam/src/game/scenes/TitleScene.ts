@@ -88,8 +88,8 @@ export class TitleScene extends Phaser.Scene {
     const t1 = txt(this, GAME_W / 2, GAME_H / 2 - 120, '선물이 도착했어요!', 34, COLORS.text, { title: true }).setOrigin(0.5);
     const t2 = txt(this, GAME_W / 2, GAME_H / 2 - 60, [
       '영물 9종이 모두 각성체(Lv.30)로 합류했어요.',
-      'Q로 영물을 바꿔 가며 영물마다 다른 필살기(U)를 써 보세요.',
-      '공격(J)은 누르고 있으면 연속 — 적이 멀면 영물 고유 원거리 공격!',
+      'Q로 영물을 바꿔 가며 영물마다 다른 필살기(V)를 써 보세요.',
+      '공격(Z)은 누르고 있으면 연속 — 적이 멀면 영물 고유 원거리 공격! 돌진 X · 기술 C',
       '청룡·주작·봉황은 공중에서 점프를 한 번 더 누르면 자유 비행.',
     ].join('\n'), 20, '#3a2a2a', { align: 'center', lineSpacing: 8 }).setOrigin(0.5, 0);
     const ok = button(this, GAME_W / 2, GAME_H / 2 + 120, 200, 56, '확인', () => layer.destroy(), 'primary', 22);

@@ -128,6 +128,8 @@ export interface ProductDef {
   available: boolean;
   /** 1회 한정 */
   oncePerAccount?: boolean;
+  /** 꾸미기 대신 계정 효과 (수행록 프리미엄·정기권) */
+  effect?: 'pass_premium' | 'monthly';
 }
 
 export interface CosmeticDef {
@@ -152,7 +154,8 @@ export type QuestGoal =
   | { type: 'level'; level: number }
   | { type: 'evolve'; stage: number }
   | { type: 'boss'; boss: string }
-  | { type: 'clear'; stage: string };
+  | { type: 'clear'; stage: string }
+  | { type: 'collect_mounts'; count: number };
 
 export interface QuestDef {
   id: string;

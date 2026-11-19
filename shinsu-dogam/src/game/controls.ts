@@ -20,7 +20,8 @@ export class Controls {
     const K = Phaser.Input.Keyboard.KeyCodes;
     const map: Record<Btn, number[]> = {
       left: [K.A, K.LEFT], right: [K.D, K.RIGHT], up: [K.W, K.UP], down: [K.S, K.DOWN],
-      jump: [K.SPACE], attack: [K.J, K.Z], special: [K.K, K.X], ult: [K.U, K.I, K.V], dash: [K.L, K.SHIFT, K.C], menu: [K.ESC, K.P], swap: [K.Q, K.TAB],
+      // PC: Z 공격 · X 돌진 · C 기술 · V 필살기 (예전 J·L·K·U 도 계속 쓸 수 있음)
+      jump: [K.SPACE], attack: [K.Z, K.J], dash: [K.X, K.L, K.SHIFT], special: [K.C, K.K], ult: [K.V, K.U], menu: [K.ESC, K.P], swap: [K.Q, K.TAB],
     };
     for (const b of BTNS) this.keys[b] = map[b].map((code) => kb.addKey(code, true, false));
   }

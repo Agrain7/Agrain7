@@ -1,0 +1,28 @@
+{
+ "w": 179,
+ "h": 213,
+ "seat": [
+  86.8,
+  175.0
+ ],
+ "tailPivot": [
+  64.4,
+  50.4
+ ],
+ "face": [
+  127.4,
+  68.6,
+  33.6
+ ],
+ "waist": [
+  58.8,
+  137.2
+ ],
+ "source": "assets-src/reference/gameplay_reference.png",
+ "box": [
+  490,
+  448,
+  618,
+  600
+ ]
+}

@@ -30,6 +30,14 @@ export const SERVER_PRICES: Record<string, { amount: number; name: string }> = {
   p_pkg_decor: { amount: 9900, name: '영물 꾸미기 패키지' },
   p_pkg_special: { amount: 12900, name: '특별 영물 패키지' },
   p_pkg_premium: { amount: 19900, name: '프리미엄 컬렉션' },
+  p_skin_baekho_snow: { amount: 9900, name: '설산 백호' },
+  p_skin_jujak_lotus: { amount: 9900, name: '홍련 주작' },
+  p_skin_bh_five: { amount: 14900, name: '오색 봉황' },
+  p_skin_hm_jade: { amount: 7900, name: '청옥 현무' },
+  p_skin_gr_sakura: { amount: 9900, name: '벚꽃 기린' },
+  p_skin_ht_gold: { amount: 14900, name: '황금 해태' },
+  p_pass_premium: { amount: 9900, name: '영물 수행록 프리미엄' },
+  p_monthly: { amount: 4900, name: '달빛 정기권 (30일)' },
 };
 
 export const json = (data: unknown, status = 200) =>

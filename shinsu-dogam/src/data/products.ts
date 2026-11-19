@@ -1,4 +1,5 @@
-// 상점 상품 (소비자가, 부가세 포함, 원). 모든 상품은 외형·꾸미기 전용이며 능력치를 바꾸지 않는다.
+// 상점 상품 (소비자가, 부가세 포함, 원). 확률형 없음 — 모두 정해진 보상.
+// 외형·꾸미기 상품 + 수행록 프리미엄·달빛 정기권(영기석 포함: 성장 시간 단축, docs/ECONOMY_DESIGN.md 2.5절).
 // available=false 상품은 해당 영물이 아직 획득 불가능하므로 '출시 예정'으로만 표시된다.
 import type { ProductDef } from './types.ts';
 
@@ -11,10 +12,12 @@ export const PRODUCTS: ProductDef[] = [
   { id: 'p_skin_cr_moon', name: '월광 청룡', category: 'skin', tier: '희귀', price: 7900, mount: 'cheongryong', grants: ['skin_cheongryong_moon'], available: true, desc: '달빛을 머금은 은청색 비늘.' },
   { id: 'p_skin_cr_maehwa', name: '매화 청룡', category: 'skin', tier: '특별', price: 9900, mount: 'cheongryong', grants: ['skin_cheongryong_maehwa'], available: true, desc: '매화 꽃빛으로 물든 청룡.' },
   { id: 'p_skin_cr_gold', name: '황금 청룡', category: 'skin', tier: '프리미엄', price: 14900, mount: 'cheongryong', grants: ['skin_cheongryong_gold'], available: true, desc: '금빛 비늘이 빛나는 청룡.' },
-  { id: 'p_skin_baekho_snow', name: '설산 백호', category: 'skin', tier: '특별', price: 9900, mount: 'baekho', grants: [], available: false, desc: '백호 획득 업데이트와 함께 출시 예정.' },
-  { id: 'p_skin_jujak_lotus', name: '홍련 주작', category: 'skin', tier: '특별', price: 9900, mount: 'jujak', grants: [], available: false, desc: '주작 획득 업데이트와 함께 출시 예정.' },
-  { id: 'p_skin_bh_five', name: '오색 봉황', category: 'skin', tier: '프리미엄', price: 14900, mount: 'bonghwang', grants: [], available: false, desc: '봉황 획득 업데이트와 함께 출시 예정.' },
-  { id: 'p_skin_hm_jade', name: '청옥 현무', category: 'skin', tier: '희귀', price: 7900, mount: 'hyeonmu', grants: [], available: false, desc: '현무 획득 업데이트와 함께 출시 예정.' },
+  { id: 'p_skin_baekho_snow', name: '설산 백호', category: 'skin', tier: '특별', price: 9900, mount: 'baekho', grants: ['skin_baekho_snow'], available: true, desc: '눈빛 털을 두른 백호. (월하산맥 1-6 정화 후 장착)' },
+  { id: 'p_skin_jujak_lotus', name: '홍련 주작', category: 'skin', tier: '특별', price: 9900, mount: 'jujak', grants: ['skin_jujak_lotus'], available: true, desc: '붉은 연꽃빛 깃털의 주작.' },
+  { id: 'p_skin_bh_five', name: '오색 봉황', category: 'skin', tier: '프리미엄', price: 14900, mount: 'bonghwang', grants: ['skin_bonghwang_five'], available: true, desc: '오방색으로 빛나는 봉황.' },
+  { id: 'p_skin_hm_jade', name: '청옥 현무', category: 'skin', tier: '희귀', price: 7900, mount: 'hyeonmu', grants: ['skin_hyeonmu_jade'], available: true, desc: '푸른 옥빛 등껍질의 현무.' },
+  { id: 'p_skin_gr_sakura', name: '벚꽃 기린', category: 'skin', tier: '특별', price: 9900, mount: 'girin', grants: ['skin_girin_sakura'], available: true, desc: '벚꽃빛 갈기의 기린.' },
+  { id: 'p_skin_ht_gold', name: '황금 해태', category: 'skin', tier: '프리미엄', price: 14900, mount: 'haetae', grants: ['skin_haetae_gold'], available: true, desc: '금빛 갈기의 해태.' },
   // 장식
   { id: 'p_decor_knot', name: '전통 매듭', category: 'decor', tier: '단일', price: 1900, grants: ['decor_knot'], available: true, desc: '영물의 목에 다는 붉은 매듭.' },
   { id: 'p_decor_jade', name: '옥 장식', category: 'decor', tier: '단일', price: 1900, grants: ['decor_jade'], available: true, desc: '맑은 옥 노리개.' },
@@ -34,9 +37,11 @@ export const PRODUCTS: ProductDef[] = [
   { id: 'p_pkg_decor', name: '영물 꾸미기 패키지', category: 'package', tier: '패키지', price: 9900, grants: ['decor_knot', 'decor_jade', 'decor_bell', 'trail_cloud', 'trail_petal'], available: true, desc: '장식 세트 + 구름 꼬리 + 꽃잎 이동 효과.' },
   { id: 'p_pkg_special', name: '특별 영물 패키지', category: 'package', tier: '패키지', price: 12900, grants: ['skin_cheongryong_moon', 'outfit_fairy'], available: true, desc: '월광 청룡 스킨 + 선녀 의상.' },
   { id: 'p_pkg_premium', name: '프리미엄 컬렉션', category: 'package', tier: '패키지', price: 19900, grants: ['skin_cheongryong_gold', 'outfit_royal', 'decor_bell', 'trail_cloud'], available: true, desc: '황금 청룡 + 궁중 예복 + 금색 방울 + 구름 꼬리.' },
-  // 탐험 패스 (추후)
-  { id: 'p_pass_basic', name: '탐험 패스', category: 'pass', tier: '일반', price: 7900, grants: [], available: false, desc: '재방문율 검증 후 도입 예정.' },
-  { id: 'p_pass_premium', name: '프리미엄 탐험 패스', category: 'pass', tier: '프리미엄', price: 12900, grants: [], available: false, desc: '재방문율 검증 후 도입 예정.' },
+  // 수행록·정기권 (확률 없이 정해진 보상)
+  { id: 'p_pass_premium', name: '영물 수행록 프리미엄', category: 'pass', tier: '시즌', price: 9900, grants: [], effect: 'pass_premium', available: true, oncePerAccount: true,
+    desc: '이번 시즌 수행록의 프리미엄 보상(30단계)을 모두 열어요. 한정 스킨 월광 백호·월광 늑대, 의상·장식, 영기석. 이미 오른 단계 보상도 받을 수 있어요.' },
+  { id: 'p_monthly', name: '달빛 정기권 (30일)', category: 'pass', tier: '정기권', price: 4900, grants: [], effect: 'monthly', available: true,
+    desc: '바로 영기석 10, 30일 동안 매일 접속하면 영기석 3·금화 100. (자동 결제 아님)' },
 ];
 
 export function productById(id: string) {

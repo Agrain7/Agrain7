@@ -1,7 +1,8 @@
 // 2D 패럴랙스 배경: 하늘(고정) → 달 → 구름 → 원경 산맥 2겹 → 중경 절벽·궁궐·폭포 → 근경 꽃나무 숲
 import Phaser from 'phaser';
 import type { SkyKind } from '../../art/world.ts';
-import { ensureSky, bgOverrides } from '../textures.ts';
+import { ensureSky, bgOverrides, type SkyLayer } from '../textures.ts';
+import { REGIONS } from '../../data/regions.ts';
 import { GAME_W, GAME_H } from '../config.ts';
 
 interface Layer { obj: Phaser.GameObjects.TileSprite; fx: number; fy: number; baseY: number; drift?: number }
@@ -26,7 +27,6 @@ export class Backdrop {
 
   constructor(scene: Phaser.Scene, sky: SkyKind, refScrollY = 0) {
     this.refScrollY = refScrollY;
-    ensureSky(scene, sky);
     const k = (n: string) => `bg_${sky}_${n}`;
     // 원경: 받은 그림 > 참고 화면에서 잘라 낸 궁궐 절벽 파노라마 > 코드 그림
     const refKey = `ref_${sky}_cliffs`;
@@ -34,9 +34,19 @@ export class Backdrop {
     this.hideFalls = bgOverrides.has(k('cliffs')) || useRef;
     // 하늘·달·구름: 참고 화면 조각이 있으면 그것을 (밝은 동양풍 2D)
     const scn = (n: string) => (scene.textures.exists(`scn_${sky}_${n}`) ? `scn_${sky}_${n}` : null);
+    // 코드로 그릴 층만 준비 (지역 테마가 많아져도 부팅·구간 시작이 느려지지 않게)
+    const need: SkyLayer[] = [];
+    if (!scn('sky')) need.push('sky');
+    if (!(useRef && scene.textures.exists('scn_moon'))) need.push('moon');
+    if (!scn('clouds')) need.push('clouds');
+    if (!useRef) need.push('mount0', 'mount1', 'cliffs');
+    if (!(useRef && scn('forest'))) need.push('grove');
+    ensureSky(scene, sky, need);
     scene.add.image(0, 0, scn('sky') ?? k('sky')).setOrigin(0).setScrollFactor(0).setDepth(-100).setDisplaySize(GAME_W, GAME_H);
     const moonKey = useRef && scene.textures.exists('scn_moon') ? 'scn_moon' : k('moon');
     this.moon = scene.add.image(900, 170, moonKey).setScrollFactor(0).setDepth(-99).setScale(sky === 'mist' ? 0.6 : 0.85).setAlpha(sky === 'mist' ? 0.7 : 1);
+    const theme = REGIONS.find((r) => r.sky === sky);
+    if (moonKey === 'scn_moon' && theme && theme.moonTint !== 0xffffff) this.moon.setTint(theme.moonTint);
     const add = (key: string, y: number, h: number, fx: number, fy: number, depth: number, drift = 0) => {
       const obj = scene.add.tileSprite(0, y, GAME_W, h, key).setOrigin(0).setScrollFactor(0).setDepth(depth);
       const L = { obj, fx, fy, baseY: y, drift };

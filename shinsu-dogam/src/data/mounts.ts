@@ -101,7 +101,7 @@ export const MOUNTS: Record<MountId, MountDef> = {
   },
   jujak: {
     id: 'jujak', name: '주작', hanja: '朱雀', title: '남쪽의 불꽃 새', category: 'legend', element: '불', symbol: '남쪽', color: '#d2452f',
-    obtainable: false, acquisition: '화염 계곡 지역에서 획득 (추후 업데이트).',
+    obtainable: true, acquisition: '화염 계곡 4-3 "주작의 불씨 터"를 돌파하면 불씨에서 깨어난 주작이 동료가 된다.',
     lore: '남쪽 하늘을 지키는 불의 새. 날갯짓마다 불씨가 흩날리며, 싸움에 나서면 전장의 열기를 다스린다.',
     base: { hp: 95, atk: 16, def: 3 }, growth: { hp: 11, atk: 2.9, def: 0.6 },
     stages: stages([
@@ -112,7 +112,7 @@ export const MOUNTS: Record<MountId, MountDef> = {
   },
   baekho: {
     id: 'baekho', name: '백호', hanja: '白虎', title: '서쪽의 강철 맹수', category: 'legend', element: '쇠', symbol: '서쪽', color: '#d9dce6',
-    obtainable: false, acquisition: '설원의 신전 지역에서 획득 (추후 업데이트).',
+    obtainable: true, acquisition: '월하산맥 1-6에서 어둠에 물든 흑운 산군(백호)을 정화하면 동료가 된다.',
     lore: '서쪽 산맥을 지키는 흰 호랑이. 쇠처럼 단단한 발톱과 한 번의 도약으로 산을 넘는 힘을 지녔다.',
     base: { hp: 120, atk: 15, def: 6 }, growth: { hp: 14, atk: 2.7, def: 1.0 },
     stages: stages([
@@ -123,7 +123,7 @@ export const MOUNTS: Record<MountId, MountDef> = {
   },
   hyeonmu: {
     id: 'hyeonmu', name: '현무', hanja: '玄武', title: '북쪽의 물의 수호자', category: 'legend', element: '물', symbol: '북쪽', color: '#2f5e57',
-    obtainable: false, acquisition: '용궁 지역에서 획득 (추후 업데이트).',
+    obtainable: true, acquisition: '용궁 3-6에서 심해의 흑현무를 정화하면 동료가 된다.',
     lore: '거북과 뱀이 한 몸을 이룬 북쪽의 수호신. 느리지만 어떤 공격도 막아 내는 등껍질을 지녔다.',
     base: { hp: 150, atk: 11, def: 10 }, growth: { hp: 18, atk: 2.0, def: 1.6 },
     stages: stages([
@@ -134,7 +134,7 @@ export const MOUNTS: Record<MountId, MountDef> = {
   },
   girin: {
     id: 'girin', name: '기린', hanja: '麒麟', title: '상서로운 생명의 영물', category: 'legend', element: '자연', symbol: '중앙', color: '#3c9d8f',
-    obtainable: false, acquisition: '봉래산 지역에서 획득 (추후 업데이트).',
+    obtainable: true, acquisition: '운무협곡 2-6에서 안개에 갇힌 기린을 정화하면 동료가 된다.',
     lore: '어진 이가 나타날 때 모습을 보인다는 상서로운 짐승. 풀 한 포기 밟지 않고 달리며 생명을 북돋운다.',
     base: { hp: 105, atk: 12, def: 5 }, growth: { hp: 13, atk: 2.2, def: 0.9 },
     stages: stages([
@@ -145,7 +145,7 @@ export const MOUNTS: Record<MountId, MountDef> = {
   },
   haetae: {
     id: 'haetae', name: '해태', hanja: '獬豸', title: '정의를 지키는 수호수', category: 'legend', element: '정의', symbol: '수호', color: '#3e5a9a',
-    obtainable: false, acquisition: '운무협곡 지역에서 획득 (추후 업데이트).',
+    obtainable: true, acquisition: '화염 계곡 4-6에서 불길에 삼켜진 해태를 정화하면 동료가 된다.',
     lore: '옳고 그름을 가려 불의를 들이받는다는 수호수. 화재와 재앙을 막는 힘이 있어 궁궐을 지켜 왔다.',
     base: { hp: 135, atk: 14, def: 8 }, growth: { hp: 16, atk: 2.5, def: 1.3 },
     stages: stages([
@@ -156,7 +156,7 @@ export const MOUNTS: Record<MountId, MountDef> = {
   },
   bonghwang: {
     id: 'bonghwang', name: '봉황', hanja: '鳳凰', title: '축복을 부르는 하늘의 길조', category: 'legend', element: '빛', symbol: '길조', color: '#e0a03a',
-    obtainable: false, acquisition: '봉래산 정상에서 획득 (추후 업데이트).',
+    obtainable: true, acquisition: '봉래산 5-6에서 빛을 잃은 봉황을 정화하면 동료가 된다.',
     lore: '태평성대에 날아든다는 길조. 오색 깃털이 빛을 머금어, 날개를 펼치면 상처가 아물고 어둠이 걷힌다.',
     base: { hp: 100, atk: 13, def: 4 }, growth: { hp: 12, atk: 2.4, def: 0.8 },
     stages: stages([

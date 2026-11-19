@@ -1,5 +1,6 @@
 // 전투: 기본 공격, 특수 기술(데이터 기반), 투사체, 적 공격, 효과 연출
 import Phaser from 'phaser';
+import { store } from '../ctx.ts';
 import type { WorldScene } from '../scenes/WorldScene.ts';
 import type { Player } from '../entities/Player.ts';
 import type { Monster } from '../entities/Monster.ts';
@@ -179,6 +180,7 @@ export class Combat {
     const U = ULTS[id];
     p.ult = 0;
     p.ultT = 2.2;
+    store.state.data.stats.ults = (store.state.data.stats.ults ?? 0) + 1;
     p.atkAnimT = 0.3;
     // 글자·화면 멈춤 없이 효과만 (사용자 요청) — 기운이 모이는 고리 후 바로 발동
     this.ring(p.x, p.y, 'fx_ring_gold', 1.6, 260);

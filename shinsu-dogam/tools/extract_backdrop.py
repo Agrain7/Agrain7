@@ -87,6 +87,17 @@ def grade(rgba: np.ndarray, kind: str) -> np.ndarray:
     elif kind == 'mist':
         mist = np.array([0.93, 0.92, 0.9])
         c = c * 0.55 + mist * 0.45
+    elif kind == 'sea':
+        c = c * np.array([0.78, 0.98, 1.02]) + np.array([0.0, 0.04, 0.06])
+        c = c * 0.85 + np.array([0.55, 0.85, 0.88]) * 0.15
+    elif kind == 'fire':
+        c = c * np.array([1.12, 0.84, 0.7]) + np.array([0.06, 0.0, 0.0])
+        c = c * 0.88 + np.array([1.0, 0.62, 0.4]) * 0.12
+    elif kind == 'paradise':
+        c = c * 0.82 + np.array([1.0, 0.93, 0.9]) * 0.18
+    elif kind == 'snow':
+        l = c.mean(axis=2, keepdims=True)
+        c = (c * 0.5 + l * 0.5) * 0.75 + np.array([0.86, 0.92, 1.0]) * 0.25
     out[..., :3] = np.clip(c * 255, 0, 255)
     return out
 
@@ -112,7 +123,7 @@ def main():
     os.makedirs(ui, exist_ok=True)
     portrait(ref).save(os.path.join(ui, 'portrait_haram.png'), optimize=True)
     base = build(ref)
-    for kind in ('dusk', 'mist'):  # 모든 구간을 밝게 (밤 판은 쓰지 않음)
+    for kind in ('dusk', 'mist', 'sea', 'fire', 'paradise', 'snow'):  # 지역 테마별 (밤 판은 쓰지 않음)
         arr = base if kind == 'dusk' else grade(base, kind)
         im = Image.fromarray(np.clip(arr, 0, 255).astype(np.uint8), 'RGBA')
         im.save(os.path.join(OUT, f'{kind}_cliffs.png'), optimize=True)

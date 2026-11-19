@@ -6,8 +6,8 @@
 | 에셋 | 출처 | 상태 |
 |---|---|---|
 | `assets-src/reference/beasts_codex.png` 및 여기서 추출한 영물 일러스트 27장 (`public/assets/mounts/*.png`) | 사용자가 대화에 첨부한 이미지(45633.png). 사용자 지시("이 일러스트들을 그대로 넣어")에 따라 배경만 제거해 사용 | **권리 미확인** |
-| `assets-src/reference/gameplay_reference.png` 및 여기서 잘라 낸 그림: 산돼지 몬스터 3종(`public/assets/monsters/boar*.png`), 궁궐 절벽 원경(`public/assets/backgrounds/*_cliffs.png`), 하늘·달·구름·숲·돌다리·정자·현수막(`public/assets/scenery/*.png`), HUD 초상(`public/assets/ui/portrait_haram.png`) | 사용자 첨부(45634.png). 2026-11-19 사용자 요청("몬스터도 저 사진에 있는 몬스터로", "배경을 내가 보낸 사진처럼")에 따라 일부를 잘라 게임에 사용 | **권리 미확인** |
-| `public/assets/monsters/{bat,boss}.png` | 위 영물 원화(매·백호)를 색만 바꿔 만든 몬스터 (`tools/make_monsters.py`) | 원화와 같음 — **권리 미확인** |
+| `assets-src/reference/gameplay_reference.png` 및 여기서 잘라 낸 그림: 산돼지 몬스터 3종(`public/assets/monsters/boar*.png`), 궁궐 절벽 원경(`public/assets/backgrounds/*_cliffs.png`), 하늘·달·구름·숲·돌다리·정자·현수막(`public/assets/scenery/*.png`), HUD 초상(`public/assets/ui/portrait_haram.png`), 라이더 하람(`public/assets/rider/*.png`) | 사용자 첨부(45634.png). 2026-11-19 사용자 요청("몬스터도 저 사진에 있는 몬스터로", "배경을 내가 보낸 사진처럼")에 따라 일부를 잘라 게임에 사용 | **권리 미확인** |
+| `public/assets/monsters/{bat,boss,boss_*}.png` | 위 영물 원화(매·백호·기린·현무·해태·봉황·청룡)를 색만 바꿔 만든 몬스터·보스 (`tools/make_monsters.py`) | 원화와 같음 — **권리 미확인** |
 
 확인할 것:
 1. 이 이미지를 **누가, 어떤 도구로** 만들었는가 (직접 제작 / 외주 / AI 생성 도구).

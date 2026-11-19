@@ -14,6 +14,8 @@ function safeStorage(): StorageLike | null {
 }
 
 const loaded = GameState.load(safeStorage());
+// 플레이테스트 페이지에서만: 모든 지역 열기
+GameState.openAll = (import.meta as unknown as { env?: Record<string, string | undefined> }).env?.VITE_PLAYTEST_OPEN === '1';
 
 export const store = {
   state: loaded,

@@ -5,10 +5,10 @@ export type OverlayItem =
   | { type: 'acquire'; mount: MountId }
   | { type: 'evolve'; mount: MountId; stage: number }
   | { type: 'evolvePrompt'; mount: MountId; stage: number }
-  | { type: 'clear'; stageId: string; time: number; exp: number; gold: number; defeats: number; chests: string; first: boolean; next?: string }
+  | { type: 'clear'; stageId: string; region?: string; stars?: number; time: number; exp: number; gold: number; defeats: number; chests: string; first: boolean; next?: string }
   | { type: 'faint' }
   | { type: 'boss'; title: string; sub: string }
-  | { type: 'purified' }
+  | { type: 'purified'; name?: string; region?: string; reward?: string; guardian?: string }
   | { type: 'message'; title: string; body: string };
 
 type Listener = () => void;

@@ -2,36 +2,9 @@
 // 좌표 단위: 월드 px. y는 아래로 증가. 지면(ground)은 top에서 월드 바닥까지 채워진다.
 // 기본 늑대 점프: 최고 높이 약 150px, 수평 약 260px → 기본 경로의 틈은 220px 이하, 계단은 120px 이하로 설계.
 
-export type TerrainStyle = 'grass' | 'stone' | 'cave';
-export type PlatformStyle = 'wood' | 'cloud' | 'stone' | 'bridge';
-
-export interface StageMap {
-  id: string;
-  index: number;
-  name: string;
-  subtitle: string;
-  intro: string;
-  width: number;
-  height: number;
-  spawn: { x: number; y: number };
-  ground: { x0: number; x1: number; top: number; style?: TerrainStyle }[];
-  blocks: { x: number; y: number; w: number; h: number; style?: TerrainStyle }[];
-  platforms: { x: number; y: number; w: number; style: PlatformStyle }[];
-  hazards: { x: number; y: number; w: number; h: number }[];
-  updrafts: { x: number; y: number; w: number; h: number }[];
-  monsters: { type: string; x: number; y: number }[];
-  chests: { id: string; x: number; y: number; loot: Record<string, number> }[];
-  pickups: { id: string; type: 'pearl_shard' | 'lore_page' | 'moon_petal' | 'coin'; x: number; y: number }[];
-  checkpoints: { x: number; y: number }[];
-  decor: { type: 'pavilion' | 'lantern' | 'tree' | 'pine' | 'rock' | 'arch' | 'shrine' | 'grass' | 'waterfall'; x: number; y: number; s?: number }[];
-  signs: { x: number; y: number; text: string; pc?: string }[];
-  goal: { x: number; y: number };
-  shrine?: { x: number; y: number };
-  boss?: { x: number; y: number; arena: [number, number] };
-  sky: 'dusk' | 'night' | 'mist';
-  tier: number;
-  clearExp: number;
-}
+import type { StageMap } from './types.ts';
+import { generateRegions } from './generate.ts';
+export type { StageMap, TerrainStyle, PlatformStyle } from './types.ts';
 
 const G = 860; // 기본 지면 높이
 const H = 1080;
@@ -41,7 +14,8 @@ const coins = (x0: number, y: number, n: number, gap = 46, id = 'c'): StageMap['
 const arc = (x0: number, y: number, n: number, id: string): StageMap['pickups'] =>
   Array.from({ length: n }, (_, i) => ({ id: `${id}${x0}_${i}`, type: 'coin' as const, x: x0 + i * 42, y: y - Math.sin((i / (n - 1)) * Math.PI) * 80 }));
 
-export const STAGES: StageMap[] = [
+/** 1지역 (손으로 만든 구간) */
+export const WOLHA_STAGES: StageMap[] = [
   {
     id: '1-1', index: 0, name: '월하산맥', subtitle: '산자락의 오솔길', sky: 'dusk', tier: 0, clearExp: 60,
     intro: '달빛이 내려앉는 산자락. 영물과 함께 첫걸음을 내딛자.',
@@ -73,7 +47,7 @@ export const STAGES: StageMap[] = [
       { x: 300, y: G, text: '← → 로 이동', pc: 'A / D 또는 ← → 로 이동' },
       { x: 860, y: G, text: '점프 버튼으로 뛰어오르기', pc: 'Space 로 점프 (길게 누르면 더 높이)' },
       { x: 1600, y: G - 70, text: '틈새를 뛰어넘자' },
-      { x: 2760, y: G, text: '돌진 버튼으로 빠르게 질주', pc: 'L 로 돌진' },
+      { x: 2760, y: G, text: '돌진 버튼으로 빠르게 질주', pc: 'X 로 돌진' },
       { x: 3540, y: G, text: '홍살문에 닿으면 구간 돌파!' },
     ],
     goal: { x: 4150, y: G },
@@ -115,7 +89,7 @@ export const STAGES: StageMap[] = [
       { type: 'grass', x: 500, y: G }, { type: 'grass', x: 2200, y: G }, { type: 'grass', x: 4500, y: G },
     ],
     signs: [
-      { x: 520, y: G, text: '공격 버튼으로 몬스터를 물리치자', pc: 'J 로 공격, K 로 특수 기술' },
+      { x: 520, y: G, text: '공격 버튼으로 몬스터를 물리치자', pc: 'Z 로 공격, C 로 특수 기술, V 로 필살기' },
       { x: 1360, y: G - 90, text: '높은 곳에 무언가 빛나고 있다…' },
     ],
     goal: { x: 5150, y: G },
@@ -285,7 +259,11 @@ export const STAGES: StageMap[] = [
   },
 ];
 
-export const FUTURE_REGIONS = ['운무협곡', '용궁', '봉래산', '화염 계곡', '설원의 신전'];
+/** 모든 구간: 1지역 + 생성기로 만든 2~6지역 (5지역 × 6구간) */
+export const STAGES: StageMap[] = [...WOLHA_STAGES, ...generateRegions()];
+
+/** (예전 이름 호환) 추후 지역 — 이제 모두 열려 있음 */
+export const FUTURE_REGIONS: string[] = [];
 
 export function stageById(id: string) {
   return STAGES.find((s) => s.id === id);

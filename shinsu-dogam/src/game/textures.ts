@@ -4,6 +4,7 @@ import { buildSheet } from '../art/sheet.ts';
 import { ANIM_TIMING, type AnimName } from '../art/types.ts';
 import { MONSTER_PAINTERS } from '../art/monsters.ts';
 import { drawRider, OUTFITS, RIDER_BOX, RIDER_ANIMS } from '../art/rider.ts';
+import { drawRefRider, recolorOutfit, refRiderBox, type RefRiderMeta } from '../art/riderRef.ts';
 import { makeCanvas } from '../art/paint.ts';
 import { readPixels, silhouette, tintedImage } from '../art/mountFrames.ts';
 import { rigJob, type RigJob, type RigResult } from '../art/rig.ts';
@@ -247,6 +248,23 @@ export function ensureRider(scene: Phaser.Scene, outfit: string): string {
     return key;
   }
   const o = OUTFITS[outfit] ?? OUTFITS.outfit_default;
+  // 참고 화면의 소녀 그림이 있으면 그것으로 (tools/extract_rider.py), 없으면 코드 그림
+  const meta = scene.cache.json.get('rider_meta') as RefRiderMeta | undefined;
+  if (meta && scene.textures.exists('rider_body') && scene.textures.exists('rider_tail')) {
+    const isDef = outfit === 'outfit_default' || !OUTFITS[outfit];
+    const body = recolorOutfit(scene.textures.get('rider_body').getSourceImage() as HTMLImageElement, meta, o, isDef);
+    const tail = scene.textures.get('rider_tail').getSourceImage() as HTMLImageElement;
+    const box = refRiderBox(meta);
+    const sheet = buildSheet(box, RIDER_ANIMS, (ctx, pose) => drawRefRider(ctx, pose, meta, body, tail, o));
+    addFramesAndAnims(scene, key, sheet.canvas, sheet.frames, RIDER_ANIMS as Record<string, number>);
+    // 그림 높이(머리끝~발끝) 약 meta.h → 기존 라이더(약 105px)와 같은 화면 크기 기준
+    riderMetas.set(key, {
+      ox: box.ox / box.w, oy: box.oy / box.h,
+      scaleMul: 140 / meta.h,
+      face: [box.ox - meta.seat[0] + meta.face[0], box.oy - meta.seat[1] + meta.face[1], meta.face[2]],
+    });
+    return key;
+  }
   const sheet = buildSheet(RIDER_BOX, RIDER_ANIMS, (ctx, pose) => drawRider(ctx, pose, o));
   addFramesAndAnims(scene, key, sheet.canvas, sheet.frames, RIDER_ANIMS as Record<string, number>);
   return key;
@@ -311,7 +329,7 @@ export function ensureMonster(scene: Phaser.Scene, id: string): string {
 
 /** 부팅 때 몬스터 리깅을 나눠서 미리 계산 (progress: 0..1) */
 export async function prewarmMonsters(scene: Phaser.Scene, progress?: (p: number) => void) {
-  const ids = Object.keys(MONSTER_ART).filter((id) => !spriteSets.has(`monsters/${id}`) && !scene.textures.exists(`mon_${id}`));
+  const ids = Object.keys(MONSTER_ART).filter((id) => !id.startsWith('boss_') && !spriteSets.has(`monsters/${id}`) && !scene.textures.exists(`mon_${id}`));
   let done = 0;
   for (const id of ids) {
     const job = monsterJob(scene, id);
@@ -326,6 +344,30 @@ export async function prewarmMonsters(scene: Phaser.Scene, progress?: (p: number
     });
     done++;
   }
+}
+
+/** 구간에 들어갈 때 보스를 미리 (프레임마다 몇 ms씩) */
+export function prewarmMonster(scene: Phaser.Scene, id: string) {
+  if (scene.textures.exists(`mon_${id}`) || spriteSets.has(`monsters/${id}`)) return;
+  const job = monsterJob(scene, id);
+  if (!job) return;
+  const ev = scene.time.addEvent({
+    delay: 16, loop: true,
+    callback: () => {
+      if (scene.textures.exists(`mon_${id}`)) { ev.remove(); return; }
+      const res = job.step(5);
+      if (res) { ev.remove(); registerMonsterRig(scene, id, res); }
+    },
+  });
+}
+/** 큰 보스 그림은 구간을 떠날 때 내려 둔다 (모바일 메모리) */
+export function releaseMonster(scene: Phaser.Scene, id: string) {
+  const key = `mon_${id}`;
+  const art = MONSTER_ART[id];
+  if (art) for (const a of Object.keys(art.anims)) scene.anims.remove(`${key}:${a}`);
+  if (scene.textures.exists(key)) scene.textures.remove(key);
+  monsterRigInfo.delete(id);
+  monsterJobs.delete(id);
 }
 
 export function monsterBox(id: string) {
@@ -354,17 +396,16 @@ export function monsterArtHeight(id: string) {
 }
 
 // ---------- 하늘/배경 ----------
-export function ensureSky(scene: Phaser.Scene, sky: W.SkyKind) {
+export type SkyLayer = 'sky' | 'moon' | 'clouds' | 'mount0' | 'mount1' | 'cliffs' | 'grove';
+/** 코드로 그리는 하늘·배경 층 (필요한 층만 — 참고 화면 조각이 있으면 그 층은 그리지 않는다) */
+export function ensureSky(scene: Phaser.Scene, sky: W.SkyKind, layers: SkyLayer[] = ['sky', 'moon', 'clouds', 'mount0', 'mount1', 'cliffs', 'grove']) {
   const k = (n: string) => `bg_${sky}_${n}`;
+  const paint: Record<SkyLayer, () => HTMLCanvasElement> = {
+    sky: () => W.paintSky(sky), moon: () => W.paintMoon(sky), clouds: () => W.paintCloudBand(sky),
+    mount0: () => W.paintMountains(sky, 0), mount1: () => W.paintMountains(sky, 1), cliffs: () => W.paintCliffs(sky).canvas, grove: () => W.paintGrove(sky),
+  };
   // 받은 배경 그림이 있으면 그 층은 그대로 쓰고, 없는 층만 그린다
-  const layer = (n: string, paint: () => HTMLCanvasElement) => { if (!scene.textures.exists(k(n))) addCanvas(scene, k(n), paint()); };
-  layer('sky', () => W.paintSky(sky));
-  layer('moon', () => W.paintMoon(sky));
-  layer('clouds', () => W.paintCloudBand(sky));
-  layer('mount0', () => W.paintMountains(sky, 0));
-  layer('mount1', () => W.paintMountains(sky, 1));
-  layer('cliffs', () => W.paintCliffs(sky).canvas);
-  layer('grove', () => W.paintGrove(sky));
+  for (const n of layers) if (!scene.textures.exists(k(n))) addCanvas(scene, k(n), paint[n]());
 }
 
 /** 부팅 시 한 번 생성하는 공용 텍스처 */
@@ -436,6 +477,8 @@ export function generateCommon(scene: Phaser.Scene) {
     ['fx_rain', () => O.paintRainStreak()],
     ['moon_ult', () => W.paintMoon('night')],
     ['btn_lotus', () => O.paintLotusButton()],
+    ['joy_base', () => O.paintJoystickBase()],
+    ['joy_knob', () => O.paintJoystickKnob()],
     ['btn_swirl_blue', () => O.paintSwirlButton('#4fb6ff', '#2a6fd0')],
     ['btn_swirl_red', () => O.paintSwirlButton('#ff6a4a', '#c3352c')],
     ['ui_panel', () => O.paintPanel(false)],

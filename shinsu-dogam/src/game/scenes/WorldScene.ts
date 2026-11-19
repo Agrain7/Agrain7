@@ -9,6 +9,10 @@ import { Combat } from '../combat/Combat.ts';
 import { controls } from '../controls.ts';
 import { store } from '../ctx.ts';
 import { STAGES, stageById, type StageMap } from '../../data/maps/wolha.ts';
+import { regionOf } from '../../data/regions.ts';
+import { addPassXp, computeStars } from '../../systems/live.ts';
+import { prewarmMonster, releaseMonster } from '../textures.ts';
+import { MONSTER_ART, monsterImageKey } from '../../data/monsterArt.ts';
 import { MONSTERS } from '../../data/monsters.ts';
 import { MOUNTS } from '../../data/mounts.ts';
 import { ITEMS } from '../../data/items.ts';
@@ -45,6 +49,7 @@ export class WorldScene extends Phaser.Scene {
   private fainting = false;
   /** 필살기 연출 중 시간 정지 (적·적 투사체 멈춤) */
   freezeT = 0;
+  private faintsThisRun = 0;
 
   constructor() {
     super('World');
@@ -52,6 +57,17 @@ export class WorldScene extends Phaser.Scene {
 
   init(data: { stage?: string }) {
     this.map = stageById(data.stage ?? store.state.data.currentStage) ?? STAGES[0];
+  }
+
+  /** 지역 테마 배경(참고 화면 조각의 색 보정판)은 필요할 때만 불러온다 */
+  preload() {
+    const sky = this.map.sky;
+    const want: [string, string][] = [[`ref_${sky}_cliffs`, `assets/backgrounds/${sky}_cliffs.png`]];
+    for (const n of ['sky', 'clouds', 'forest']) want.push([`scn_${sky}_${n}`, `assets/scenery/${sky}_${n}.png`]);
+    for (const [k, f] of want) if (!this.textures.exists(k)) this.load.image(k, f);
+    // 이 지역 보스 그림
+    const bossId = this.map.boss ? regionOf(this.map.id).bossId : null;
+    if (bossId && MONSTER_ART[bossId] && !this.textures.exists(monsterImageKey(bossId))) this.load.image(monsterImageKey(bossId), MONSTER_ART[bossId].file);
   }
 
   create() {
@@ -62,6 +78,7 @@ export class WorldScene extends Phaser.Scene {
     this.bossStarted = false;
     this.fainting = false;
     this.defeatsThisRun = 0;
+    this.faintsThisRun = 0;
     this.physics.world.setBounds(0, -600, map.width, map.height + 1000);
     this.physics.world.setBoundsCollision(true, true, false, false);
     const cam = this.cameras.main;
@@ -74,6 +91,20 @@ export class WorldScene extends Phaser.Scene {
     ];
     this.platRects = map.platforms.map((p) => ({ x: p.x, y: p.y, w: p.w, h: 16 }));
     this.level = new Level(this, map);
+    // 지역 분위기: 지형·장식에 지역 색을 곱한다 (용궁은 푸르게, 화염 계곡은 붉게, 설원은 희게)
+    const region = regionOf(map.id);
+    if (region.groundTint !== 0xffffff) {
+      for (const o of this.children.list) {
+        const d = o as Phaser.GameObjects.Image;
+        if (d.depth <= -6 && d.depth >= -14 && typeof d.setTint === 'function') {
+          d.setTint(region.groundTint);
+          if (region.groundMode === 'screen') d.setTintMode(Phaser.TintModes.SCREEN);
+        }
+      }
+    }
+    if (region.sky === 'fire') for (const h of map.hazards) this.add.particles(h.x + h.w / 2, h.y, 'fx_fire', { x: { min: -h.w / 2, max: h.w / 2 }, speedY: { min: -90, max: -40 }, lifespan: 600, scale: { start: 0.5, end: 0 }, frequency: 90, blendMode: 'ADD' }).setDepth(-6);
+    if (map.boss && region.bossId !== 'boss') prewarmMonster(this, region.bossId);
+    this.addWeather(region.sky);
     this.respawn = { x: map.spawn.x, y: map.spawn.y };
     this.player = new Player(this, map.spawn.x, map.spawn.y);
     // 전경 수풀 (참고 화면 아래쪽의 어두운 잎사귀, 카메라보다 빠르게 흐름)
@@ -121,6 +152,9 @@ export class WorldScene extends Phaser.Scene {
     for (const m of this.monsters) if (!m.dead) m.destroy();
     this.monsters = [];
     this.player?.destroy();
+    // 큰 보스 그림은 구간을 떠나면 내려 둔다
+    const bossId = this.map?.boss ? regionOf(this.map.id).bossId : null;
+    if (bossId && bossId !== 'boss') releaseMonster(this, bossId);
     this.input.keyboard?.removeAllKeys(true);
   }
 
@@ -144,6 +178,7 @@ export class WorldScene extends Phaser.Scene {
     const def = MONSTERS[type];
     if (!def) return;
     const m = new Monster(this, def, x, y, this.map.tier);
+    m.baseTint = regionOf(this.map.id).monsterTint;
     this.physics.add.collider(m.zone, this.level.solids);
     if (!def.flying) this.physics.add.collider(m.zone, this.level.oneways);
     this.monsters.push(m);
@@ -234,13 +269,20 @@ export class WorldScene extends Phaser.Scene {
     this.cameras.main.flash(600, 255, 245, 220);
     this.tweens.add({ targets: b.spr, alpha: 0, duration: 2200, delay: 600 });
     this.time.addEvent({ delay: 120, repeat: 18, callback: () => this.combat.sparks(b.x + Phaser.Math.Between(-80, 80), b.y + Phaser.Math.Between(-80, 40), 8) });
-    st.recordDefeat('boss');
-    st.addItem('gold', 300);
-    st.addItem('spirit_stone', 8);
+    const R = regionOf(this.map.id);
+    const firstTime = !st.data.stats.bosses.includes(b.def.id);
+    st.recordDefeat(b.def.id);
+    const gold = b.def.gold[0], stones = b.def.drops[0]?.qty[0] ?? 8;
+    st.addItem('gold', gold);
+    st.addItem('spirit_stone', stones);
     st.addItem('moon_petal', 5);
     st.addExp(b.exp);
+    addPassXp(st, 300);
     this.events.emit('boss-hp', 0, 1, false);
-    overlayQueue.push({ type: 'purified' });
+    overlayQueue.push({ type: 'purified', name: b.def.name, region: R.name, reward: `영기석 +${stones} · 월하 꽃잎 +5 · 금화 +${gold}`, guardian: firstTime && R.guardian && !st.owns(R.guardian) ? R.guardian : undefined });
+    // 정화된 수호 영물이 동료가 된다
+    // (월드가 정화 연출로 멈추므로 지연 호출 대신 바로 — 합류 연출은 정화 연출 다음 차례로 뜬다)
+    if (R.guardian && !st.owns(R.guardian)) st.obtainMount(R.guardian);
     this.time.delayedCall(2600, () => {
       this.player.locked = false;
       audio.startMusic('calm');
@@ -262,6 +304,13 @@ export class WorldScene extends Phaser.Scene {
     st.clearStage(this.map.id, time);
     st.addItem('gold', gold);
     st.addExp(exp);
+    // 별: ★ 돌파 · ★ 보물 상자 모두 · ★ 쓰러지지 않고
+    const recNow = st.data.stages[this.map.id]!;
+    const allChests = this.map.chests.every((c) => recNow.chests.includes(c.id));
+    const stars = computeStars(allChests, this.faintsThisRun === 0);
+    recNow.stars = Math.max(recNow.stars ?? 0, stars);
+    st.data.stats.clears = (st.data.stats.clears ?? 0) + 1;
+    addPassXp(st, first ? 120 : 60);
     if (next) st.data.currentStage = next;
     if (this.map.id === '1-1' && !st.data.tutorialDone) {
       st.data.tutorialDone = true;
@@ -271,12 +320,13 @@ export class WorldScene extends Phaser.Scene {
     audio.play('clear');
     analytics.track('stage_clear', { stage: this.map.id, time: Math.round(time), first });
     const rec = st.data.stages[this.map.id];
-    overlayQueue.push({ type: 'clear', stageId: this.map.id, time, exp, gold, defeats: this.defeatsThisRun, chests: `${rec?.chests.length ?? 0}/${this.map.chests.length}`, first, next });
+    overlayQueue.push({ type: 'clear', stageId: this.map.id, region: this.map.name, stars, time, exp, gold, defeats: this.defeatsThisRun, chests: `${rec?.chests.length ?? 0}/${this.map.chests.length}`, first, next });
   }
 
   private faint() {
     if (this.fainting) return;
     this.fainting = true;
+    this.faintsThisRun++;
     store.state.data.stats.deaths++;
     this.player.locked = true;
     audio.play('hurt');
@@ -313,7 +363,7 @@ export class WorldScene extends Phaser.Scene {
 
   private swapMount() {
     const st = store.state;
-    const owned = st.ownedMounts();
+    const owned = st.rideableMounts();
     if (owned.length < 2 || this.swapCD > 0) return;
     const i = owned.findIndex((m) => m.id === st.data.activeMount);
     const n = owned[(i + 1) % owned.length];
@@ -358,7 +408,7 @@ export class WorldScene extends Phaser.Scene {
     this.monsters = this.monsters.filter((m) => !(m.dead && !m.spr.active));
     if (this.freezeT <= 0) this.combat.update(dt);
     // 카메라: 진행 방향 쪽을 넓게
-    this.camOffX = Phaser.Math.Linear(this.camOffX, -p.facing * 190, Math.min(1, dt * 1.6));
+    this.camOffX = Phaser.Math.Linear(this.camOffX, -p.facing * 190, Math.min(1, dt * 2.8));
     this.cameras.main.setFollowOffset(this.camOffX, p.flying ? 0 : -40);
     this.bd.update(this.cameras.main.scrollX, this.cameras.main.scrollY, dt);
     this.fg.tilePositionX = this.cameras.main.scrollX * 1.3;
@@ -417,7 +467,7 @@ export class WorldScene extends Phaser.Scene {
     }
     // 보스
     if (map.boss && !this.bossStarted && p.x > map.boss.arena[0] + 80) this.startBoss();
-    if (this.boss) this.events.emit('boss-hp', Math.max(0, this.boss.hp), this.boss.maxHp, !this.boss.dead);
+    if (this.boss) this.events.emit('boss-hp', Math.max(0, this.boss.hp), this.boss.maxHp, !this.boss.dead, this.boss.def.name);
     // 골
     const goalOpen = !map.boss || (this.boss?.dead ?? false);
     if (goalOpen && overlaps(pr, this.level.goal)) this.stageClear();
@@ -444,14 +494,15 @@ export class WorldScene extends Phaser.Scene {
     const map = this.map;
     this.bossStarted = true;
     this.level.closeArena(map.boss!.arena[0]);
-    this.boss = new Boss(this, map.boss!.x, map.boss!.y, map.boss!.arena);
+    const R = regionOf(map.id);
+    this.boss = new Boss(this, map.boss!.x, map.boss!.y, map.boss!.arena, R.bossId);
     this.physics.add.collider(this.boss.zone, this.level.solids);
     this.physics.add.collider(this.boss.zone, this.level.oneways);
     this.monsters.push(this.boss);
     audio.startMusic('boss');
     audio.play('boss');
     this.cameras.main.shake(500, 0.008);
-    overlayQueue.push({ type: 'boss', title: '흑운 산군', sub: '어둠에 물든 월하산맥의 수호신' });
+    overlayQueue.push({ type: 'boss', title: R.bossName, sub: R.n === 6 ? '모든 어둠의 근원' : `어둠에 물든 ${R.name}의 수호 영물` });
   }
 
   private collect(pk: Level['pickups'][number]) {
@@ -463,6 +514,7 @@ export class WorldScene extends Phaser.Scene {
     switch (pk.type) {
       case 'coin':
         st.addItem('gold', 2);
+        st.data.stats.coins = (st.data.stats.coins ?? 0) + 1;
         audio.play('coin');
         break;
       case 'pearl_shard': {
@@ -506,6 +558,22 @@ export class WorldScene extends Phaser.Scene {
     this.combat.floatText(c.x, c.y - 80, lines.join('  '), '#ffe08a', 18);
     this.hudMsg('보물 상자를 열었다!', '#ffe08a');
     st.save();
+  }
+
+  /** 지역 날씨: 눈·불티·물방울·꽃잎·안개 (화면에 고정, 가볍게) */
+  private addWeather(kind: string) {
+    const cfg: Record<string, Phaser.Types.GameObjects.Particles.ParticleEmitterConfig & { key: string }> = {
+      snow: { key: 'wisp', x: { min: -40, max: GAME_W + 40 }, y: -20, speedY: { min: 50, max: 110 }, speedX: { min: -40, max: 10 }, scale: { min: 0.6, max: 1.3 }, alpha: { start: 1, end: 0.7 }, lifespan: 8000, frequency: 40, tint: 0xffffff },
+      fire: { key: 'wisp_gold', x: { min: 0, max: GAME_W }, y: GAME_H + 10, speedY: { min: -120, max: -60 }, speedX: { min: -20, max: 20 }, scale: { start: 0.5, end: 0 }, alpha: { start: 0.9, end: 0 }, lifespan: 5000, frequency: 90, tint: 0xff8a3c, blendMode: 'ADD' },
+      sea: { key: 'wisp', x: { min: 0, max: GAME_W }, y: GAME_H + 10, speedY: { min: -70, max: -30 }, speedX: { min: -10, max: 10 }, scale: { min: 0.2, max: 0.5 }, alpha: { start: 0.6, end: 0 }, lifespan: 9000, frequency: 160, tint: 0xc8f4ff },
+      paradise: { key: 'petal', x: { min: -40, max: GAME_W + 40 }, y: -20, speedY: { min: 30, max: 70 }, speedX: { min: -40, max: 0 }, rotate: { min: 0, max: 360 }, scale: { min: 0.5, max: 0.9 }, lifespan: 12000, frequency: 260 },
+      dusk: { key: 'petal', x: { min: -40, max: GAME_W + 40 }, y: -20, speedY: { min: 30, max: 60 }, speedX: { min: -40, max: 0 }, rotate: { min: 0, max: 360 }, scale: { min: 0.4, max: 0.8 }, lifespan: 12000, frequency: 700 },
+      mist: { key: 'wisp', x: { min: 0, max: GAME_W }, y: { min: GAME_H * 0.4, max: GAME_H }, speedX: { min: -14, max: -4 }, scale: { min: 3, max: 6 }, alpha: { start: 0, end: 0.12 }, lifespan: 6000, frequency: 400, tint: 0xffffff },
+    };
+    const c = cfg[kind];
+    if (!c || !this.textures.exists(c.key)) return;
+    const { key, ...conf } = c;
+    this.add.particles(0, 0, key, conf).setScrollFactor(0).setDepth(25);
   }
 
   /** OverlayScene에서 호출 */

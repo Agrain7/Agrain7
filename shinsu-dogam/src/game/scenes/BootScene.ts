@@ -21,11 +21,16 @@ export class BootScene extends Phaser.Scene {
     this.drawBar(0);
     this.load.on('progress', (p: number) => this.drawBar(p * 0.4));
     for (const key of Object.keys(MOUNT_ART)) this.load.image(`img_${key}`, `assets/mounts/${key}.png`);
-    for (const [id, art] of Object.entries(MONSTER_ART)) this.load.image(monsterImageKey(id), art.file);
-    for (const sky of ['dusk', 'mist']) this.load.image(`ref_${sky}_cliffs`, `assets/backgrounds/${sky}_cliffs.png`);
+    for (const [id, art] of Object.entries(MONSTER_ART)) if (!id.startsWith('boss_')) this.load.image(monsterImageKey(id), art.file);
+    // 첫 지역(황혼) 배경만 부팅 때. 다른 지역 테마는 그 구간에 들어갈 때 불러온다 (WorldScene.preload)
+    this.load.image('ref_dusk_cliffs', 'assets/backgrounds/dusk_cliffs.png');
     this.load.image('ref_portrait', 'assets/ui/portrait_haram.png');
+    // 라이더 하람 (참고 화면의 소녀)
+    this.load.image('rider_body', 'assets/rider/haram_body.png');
+    this.load.image('rider_tail', 'assets/rider/haram_tail.png');
+    this.load.json('rider_meta', 'assets/rider/haram.json');
     // 참고 화면에서 잘라 낸 배경 조각 (tools/extract_scenery.py)
-    for (const sky of ['dusk', 'mist']) for (const n of ['sky', 'clouds', 'forest']) this.load.image(`scn_${sky}_${n}`, `assets/scenery/${sky}_${n}.png`);
+    for (const n of ['sky', 'clouds', 'forest']) this.load.image(`scn_dusk_${n}`, `assets/scenery/dusk_${n}.png`);
     for (const n of ['moon', 'bridge_top', 'pavilion', 'banner_red', 'banner_pink']) this.load.image(`scn_${n}`, `assets/scenery/${n}.png`);
   }
 

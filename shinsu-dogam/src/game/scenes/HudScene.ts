@@ -30,6 +30,9 @@ export class HudScene extends Phaser.Scene {
   private btns: UIBtn[] = [];
   private btnLayer!: Phaser.GameObjects.Container;
   private legend!: Phaser.GameObjects.Text;
+  /** 원형 방향키 (테스트·키보드 표시용) */
+  joy?: { cx: number; cy: number; R: number; knob: Phaser.GameObjects.Image };
+  private bossName!: Phaser.GameObjects.Text;
   private bossLayer!: Phaser.GameObjects.Container;
   private bossBar!: ReturnType<typeof bar>;
   private msgs: Phaser.GameObjects.Text[] = [];
@@ -74,14 +77,14 @@ export class HudScene extends Phaser.Scene {
     sw.on('pointerdown', () => { controls.touch.swap = true; audio.unlock(); });
     sw.on('pointerup', () => { controls.touch.swap = false; });
     sw.on('pointerout', () => { controls.touch.swap = false; });
-    sw.setVisible(store.state.ownedMounts().length > 1);
+    sw.setVisible(store.state.rideableMounts().length > 1);
     if (sw.visible) txt(this, GAME_W - 62, 146, 'Q 교체', 12, '#f6ead0', { stroke: '#1d1a2b', strokeThickness: 3 }).setOrigin(0.5);
     // ---- 상단 가운데: 구간 진행 (편의) ----
     this.progress = this.add.graphics();
     this.progressIcon = this.add.image(0, 26, 'wisp_gold').setScale(1.2);
     // ---- 보스 체력 ----
     this.bossLayer = this.add.container(0, 0).setVisible(false);
-    const bt = txt(this, GAME_W / 2, 96, '흑운 산군', 22, '#ffd0c8', { title: true, stroke: '#1d1a2b', strokeThickness: 5 }).setOrigin(0.5);
+    const bt = this.bossName = txt(this, GAME_W / 2, 96, '흑운 산군', 22, '#ffd0c8', { title: true, stroke: '#1d1a2b', strokeThickness: 5 }).setOrigin(0.5);
     this.bossBar = bar(this, GAME_W / 2 - 260, 116, 520, 18, 0x8a2be2);
     this.bossLayer.add([bt, this.bossBar.g]);
     // ---- 버튼 (참고 화면 배치) ----
@@ -106,27 +109,24 @@ export class HudScene extends Phaser.Scene {
       this.btns.push(b);
       return b;
     };
-    // 좌하단 이동 (구름 장식)
-    this.btnLayer.add(this.add.image(165, GAME_H - 96, 'hud_cloud').setAlpha(0.9));
-    mk('btn_left', 98, GAME_H - 96, 'left', 0.9, false, 'A / ←');
-    mk('btn_right', 232, GAME_H - 96, 'right', 0.9, false, 'D / →');
-    mk('btn_down', 165, GAME_H - 214, 'down', 0.6);
+    // 좌하단 이동: 원형 방향키 (손가락을 대고 끌면 그 방향으로, 위·아래는 비행 상승·하강)
+    this.makeJoystick(pc);
     // 우하단 기술
-    mk('btn_swirl_blue', GAME_W - 478, GAME_H - 92, 'attack', 0.82, true, 'J 공격');
-    mk('btn_swirl_red', GAME_W - 362, GAME_H - 92, 'special', 0.82, true, 'K 기술');
-    const lotus = mk('btn_lotus', GAME_W - 246, GAME_H - 92, 'ult', 0.82, false, 'U 필살기');
+    mk('btn_swirl_blue', GAME_W - 478, GAME_H - 92, 'attack', 0.82, true, 'Z 공격');
+    mk('btn_swirl_red', GAME_W - 362, GAME_H - 92, 'special', 0.82, true, 'C 기술');
+    const lotus = mk('btn_lotus', GAME_W - 246, GAME_H - 92, 'ult', 0.82, false, 'V 필살기');
     mk('btn_jump', GAME_W - 112, GAME_H - 108, 'jump', 1.04, false, 'Space 점프');
-    mk('btn_dash', GAME_W - 112, GAME_H - 250, 'dash', 0.66, true, 'L 돌진');
+    mk('btn_dash', GAME_W - 112, GAME_H - 250, 'dash', 0.66, true, 'X 돌진');
     this.ultGlow = this.add.image(lotus.img.x, lotus.img.y, 'wisp_gold').setScale(7).setAlpha(0).setBlendMode(Phaser.BlendModes.ADD);
     this.btnLayer.addAt(this.ultGlow, 0);
     this.ultRing = this.add.graphics();
     this.btnLayer.add(this.ultRing);
-    this.legend = txt(this, GAME_W / 2, GAME_H - 16, 'A·D 이동 · Space 점프(길게: 활공·비행) · J 공격(누르고 있으면 연속, 멀면 원거리) · K 기술 · U 필살기 · L 돌진 · Q 교체 · Esc 메뉴', 13, '#f6ead0', { stroke: '#1d1a2b', strokeThickness: 3 }).setOrigin(0.5).setAlpha(0.85);
+    this.legend = txt(this, GAME_W / 2, GAME_H - 16, 'A·D 이동 · Space 점프(길게: 활공·비행) · Z 공격(누르고 있으면 연속, 멀면 원거리) · X 돌진 · C 기술 · V 필살기 · Q 교체 · Esc 메뉴', 13, '#f6ead0', { stroke: '#1d1a2b', strokeThickness: 3 }).setOrigin(0.5).setAlpha(0.85);
     this.applyButtonMode();
     // ---- 월드 이벤트 ----
     const onMsg = (m: string, c: string) => this.message(m, c);
     const onTitle = (t: string, s: string) => this.titleCard(t, s);
-    const onBoss = (hp: number, max: number, show: boolean) => { this.bossLayer.setVisible(show); this.bossBar.set(hp / max); };
+    const onBoss = (hp: number, max: number, show: boolean, name?: string) => { this.bossLayer.setVisible(show); this.bossBar.set(hp / max); if (name && this.bossName.text !== name) this.bossName.setText(name); };
     this.world.events.on('hud-msg', onMsg);
     this.world.events.on('hud-title', onTitle);
     this.world.events.on('boss-hp', onBoss);
@@ -136,6 +136,48 @@ export class HudScene extends Phaser.Scene {
       this.world.events.off('boss-hp', onBoss);
     });
     this.events.on('resume', () => { this.applyButtonMode(); this.refreshFace(); });
+  }
+
+  /** 원형 방향키 */
+  private makeJoystick(pc: boolean) {
+    const cx = 146, cy = GAME_H - 118, R = 76;
+    const base = this.add.image(cx, cy, 'joy_base').setAlpha(0.92).setScale(0.8);
+    const knob = this.add.image(cx, cy, 'joy_knob').setScale(0.82);
+    this.btnLayer.add([base, knob]);
+    if (pc) this.btnLayer.add(txt(this, cx, cy + R + 14, 'A·D / ← →', 13, '#f6ead0', { stroke: '#1d1a2b', strokeThickness: 3 }).setOrigin(0.5));
+    // 넓은 터치 영역 (왼쪽 아래) — 처음 닿은 손가락 하나만 따라간다
+    const zone = this.add.zone(0, GAME_H - 360, 440, 360).setOrigin(0).setInteractive();
+    this.btnLayer.addAt(zone, 0);
+    let pid = -1;
+    const set = (px: number, py: number) => {
+      let dx = px - cx, dy = py - cy;
+      const d = Math.hypot(dx, dy);
+      if (d > R) { dx = (dx / d) * R; dy = (dy / d) * R; }
+      knob.setPosition(cx + dx, cy + dy);
+      const nx = dx / R, ny = dy / R;
+      controls.touch.left = nx < -0.28;
+      controls.touch.right = nx > 0.28;
+      controls.touch.up = ny < -0.55;
+      controls.touch.down = ny > 0.55;
+    };
+    const release = () => {
+      pid = -1;
+      controls.touch.left = controls.touch.right = controls.touch.up = controls.touch.down = false;
+      this.tweens.add({ targets: knob, x: cx, y: cy, duration: 90, ease: 'Quad.out' });
+      base.setAlpha(0.92);
+    };
+    zone.on('pointerdown', (p: Phaser.Input.Pointer) => {
+      if (pid !== -1) return;
+      pid = p.id;
+      controls.usedTouch = true;
+      audio.unlock();
+      base.setAlpha(1);
+      set(p.x, p.y);
+    });
+    this.input.on('pointermove', (p: Phaser.Input.Pointer) => { if (p.id === pid && p.isDown) set(p.x, p.y); });
+    this.input.on('pointerup', (p: Phaser.Input.Pointer) => { if (p.id === pid) release(); });
+    this.input.on('gameout', () => { if (pid !== -1) release(); });
+    this.joy = { cx, cy, R, knob };
   }
 
   /** HUD 장식 텍스처 (한 번만 생성) */

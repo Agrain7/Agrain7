@@ -14,8 +14,8 @@ export class Boss extends Monster {
   private pattern = 0;
   private leapTarget = 0;
 
-  constructor(scene: WorldScene, x: number, y: number, arena: [number, number]) {
-    super(scene, MONSTERS.boss, x, y, 4);
+  constructor(scene: WorldScene, x: number, y: number, arena: [number, number], defId = 'boss') {
+    super(scene, MONSTERS[defId] ?? MONSTERS.boss, x, y, 4);
     this.boss = true;
     this.arena = arena;
     this.hpBar.setVisible(false);
@@ -34,7 +34,7 @@ export class Boss extends Monster {
       this.bstate = 'roar';
       this.stateT = 1.4;
       this.play('cast');
-      this.scene.hudMsg('흑운 산군이 분노했다!', '#ff8a7a');
+      this.scene.hudMsg(`${this.def.name}이(가) 분노했다!`, '#ff8a7a');
       audio.play('boss');
       this.scene.cameras.main.shake(400, 0.01);
     }

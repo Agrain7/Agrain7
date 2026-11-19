@@ -3,12 +3,16 @@ import {
   type Ctx, makeCanvas, rng, rgba, shadeHex, glow, circle, ellipse, TAU, clamp, splinePath, type V, paintShape, clipTo, tuft, cloudSwirl, lerp,
 } from './paint.ts';
 
-export type SkyKind = 'dusk' | 'night' | 'mist';
+export type SkyKind = 'dusk' | 'night' | 'mist' | 'sea' | 'fire' | 'paradise' | 'snow';
 
 const SKY: Record<SkyKind, { stops: [number, string][]; stars: number; mount: [string, string, string]; mist: string; moon: string }> = {
   dusk: { stops: [[0, '#2f3b74'], [0.3, '#5a6aa6'], [0.58, '#9a9bc9'], [0.8, '#d6b7b8'], [1, '#f2d6be']], stars: 40, mount: ['#9198c4', '#7178a9', '#525a86'], mist: '#f3d9c4', moon: '#f6bf8a' },
   night: { stops: [[0, '#0f1433'], [0.4, '#273063'], [0.75, '#5d5c94'], [1, '#a996bd']], stars: 160, mount: ['#5c6191', '#424878', '#2f3561'], mist: '#b6a8cc', moon: '#f4c690' },
   mist: { stops: [[0, '#6f8fbf'], [0.45, '#a9c0dc'], [0.8, '#e6dccd'], [1, '#f4e8d6']], stars: 0, mount: ['#9fb0cc', '#8296b8', '#687ea3'], mist: '#f2ece2', moon: '#fff1c9' },
+  sea: { stops: [[0, '#2a6f8f'], [0.35, '#4fa3bf'], [0.7, '#9fd8de'], [1, '#e2f4ee']], stars: 0, mount: ['#7fb8c8', '#5f9fb4', '#467f98'], mist: '#d8f2f0', moon: '#e8fbff' },
+  fire: { stops: [[0, '#5a2a46'], [0.35, '#b04a4a'], [0.7, '#f08a4a'], [1, '#ffd08a']], stars: 10, mount: ['#b0707a', '#8a4a5a', '#5e2e40'], mist: '#ffd0a0', moon: '#ffb070' },
+  paradise: { stops: [[0, '#6a8ad0'], [0.35, '#a6b8ee'], [0.7, '#f4c8d8'], [1, '#fff0d8']], stars: 0, mount: ['#b8b0dc', '#9a92c4', '#7a74aa'], mist: '#fff2e8', moon: '#fff6d0' },
+  snow: { stops: [[0, '#5a76a8'], [0.35, '#9ab2d8'], [0.7, '#dfe8f6'], [1, '#f8fbff']], stars: 20, mount: ['#b8c6e0', '#9aaccc', '#7a8eb4'], mist: '#f4f8ff', moon: '#f4f8ff' },
 };
 
 export function paintSky(kind: SkyKind, w = 1280, h = 720): HTMLCanvasElement {

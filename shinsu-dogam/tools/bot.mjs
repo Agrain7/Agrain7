@@ -11,12 +11,12 @@ for (const id of stages) {
   await page.goto(`http://localhost:5173/?debug&stage=${id}`);
   await page.waitForFunction(() => window.__SD_READY__ === true, null, { timeout: 60000 });
   await page.waitForTimeout(1200);
-  const res = await page.evaluate(async () => {
+  const res = await page.evaluate(async (LEVEL) => {
     const l = window.__SD__.game.loop;
     setInterval(() => { l.inFocus = true; l._coolDown = 0; }, 100);
     const g = window.__SD__.game;
     const s = window.__SD__.store.state;
-    s.data.mounts.wolf.level = 12; // 몬스터에 쓰러지지 않을 정도 (이동 능력은 유체 그대로)
+    s.data.mounts.wolf.level = LEVEL; // 몬스터에 쓰러지지 않을 정도 (이동 능력은 유체 그대로)
     const w = g.scene.getScene('World');
     w.player.rebuild(true);
     const v = window.__SD__.game.registry; void v;
@@ -47,7 +47,7 @@ for (const id of stages) {
         ctl.virtual.jump = wantJump || p.inUpdraft || (!p.grounded && p.body.velocity.y < 0 && ctl.virtual.jump);
       }, 30);
     });
-  });
+  }, Number(process.env.BOT_LEVEL ?? 12));
   console.log(id, JSON.stringify(res), errs.length ? 'ERR ' + errs[0] : '');
   await page.close();
 }

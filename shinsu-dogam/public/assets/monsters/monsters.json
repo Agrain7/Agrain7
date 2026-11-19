@@ -11,6 +11,36 @@
   "h": 113,
   "base": "hawk_1"
  },
+ "boss_girin": {
+  "file": "assets/monsters/boss_girin.png",
+  "w": 273,
+  "h": 199,
+  "base": "girin_2"
+ },
+ "boss_hyeonmu": {
+  "file": "assets/monsters/boss_hyeonmu.png",
+  "w": 313,
+  "h": 180,
+  "base": "hyeonmu_2"
+ },
+ "boss_haetae": {
+  "file": "assets/monsters/boss_haetae.png",
+  "w": 327,
+  "h": 193,
+  "base": "haetae_2"
+ },
+ "boss_bonghwang": {
+  "file": "assets/monsters/boss_bonghwang.png",
+  "w": 270,
+  "h": 236,
+  "base": "bonghwang_2"
+ },
+ "boss_dragon": {
+  "file": "assets/monsters/boss_dragon.png",
+  "w": 304,
+  "h": 197,
+  "base": "cheongryong_2"
+ },
  "boss": {
   "file": "assets/monsters/boss.png",
   "w": 304,

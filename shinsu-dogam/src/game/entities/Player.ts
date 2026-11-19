@@ -380,6 +380,11 @@ export class Player {
     const flip = this.facing < 0;
     this.mountSpr.setFlipX(flip);
     this.riderSpr.setFlipX(flip);
+    // 좌우 반전은 그림 가운데 기준이라, 안장(원점)이 가운데가 아닌 라이더는 원점도 거울처럼 옮긴다
+    // (안 그러면 왼쪽을 볼 때 라이더가 앞으로 밀려 영물 얼굴을 가린다)
+    const rm = riderMeta(this.riderKey);
+    const wantOx = flip ? 1 - rm.ox : rm.ox;
+    if (Math.abs(this.riderSpr.originX - wantOx) > 1e-4) this.riderSpr.setOrigin(wantOx, rm.oy);
     const sc = info.scale;
     const so = this.mt.seat[this.mountSpr.frame.name] ?? [0, 0];
     let seatX = (info.seat[0] - 0.5 + so[0]) * info.w * sc * this.facing;

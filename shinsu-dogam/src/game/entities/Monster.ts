@@ -27,6 +27,8 @@ export class Monster {
   key: string;
   boss = false;
   artH = 0;
+  /** 지역 분위기 색 (곱하기) */
+  baseTint = 0xffffff;
   /** 떠다니는 요괴 아래 요기 고리 */
   aura?: Phaser.GameObjects.Image;
 
@@ -133,6 +135,7 @@ export class Monster {
     this.aura?.setPosition(b.center.x, b.bottom + 10);
     this.spr.setFlipX(this.facing < 0);
     if (this.flashT > 0) this.spr.setTint(0xffffff).setTintMode(Phaser.TintModes.FILL);
+    else if (this.baseTint !== 0xffffff) this.spr.setTint(this.baseTint).setTintMode(Phaser.TintModes.MULTIPLY);
     else this.spr.clearTint().setTintMode(Phaser.TintModes.MULTIPLY);
     if (b.y > this.scene.level.map.height + 200) this.die();
     this.drawHp();

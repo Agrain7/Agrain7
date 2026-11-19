@@ -154,6 +154,12 @@ MONSTERS = {
     # 먹구름 까마귀 요괴 (비행) ← 매 성장체
     'bat': {'base': 'hawk_1', 'map': {'neutral': 'char_cream', 'blue': 'crimson'}, 'swirls': [(0.42, 0.42, 0.045)]},
     # 흑운 산군 (보스) ← 백호 각성체: 흰 털 → 먹빛, 남색 줄무늬·푸른 눈·술 → 진홍
+    # 지역 수호 영물 보스 (어둠에 물든 모습): 흰·밝은 털 → 먹빛, 푸른빛 → 진홍, 금장식 → 달아오른 불빛
+    'boss_girin': {'base': 'girin_2', 'map': {'neutral': 'char', 'blue': 'crimson', 'gold': 'ember', 'cream_region': [(0.62, 0.0), (1.0, 0.0), (1.0, 0.5), (0.66, 0.6)], 'cream_l': (0.82, 0.93)}, 'swirls': [(0.48, 0.5, 0.03)]},
+    'boss_hyeonmu': {'base': 'hyeonmu_2', 'map': {'neutral': 'char', 'blue': 'crimson', 'blue_hue': (60, 260), 'gold': 'ember'}, 'swirls': [(0.45, 0.55, 0.035)]},
+    'boss_haetae': {'base': 'haetae_2', 'map': {'neutral': 'char', 'blue': 'crimson', 'gold': 'ember'}, 'swirls': [(0.42, 0.6, 0.035)]},
+    'boss_bonghwang': {'base': 'bonghwang_2', 'map': {'neutral': 'char_cream', 'blue': 'crimson', 'gold': 'ember'}, 'swirls': []},
+    'boss_dragon': {'base': 'cheongryong_2', 'map': {'neutral': 'char', 'blue': 'char', 'blue_hue': (150, 280), 'gold': 'crimson'}, 'swirls': [(0.4, 0.55, 0.03)]},
     'boss': {'base': 'baekho_2', 'map': {'neutral': 'char', 'blue': 'crimson', 'gold': 'ember', 'cream_region': [(0.56, 0.0), (0.86, 0.0), (0.84, 0.78), (0.6, 0.8)], 'cream_l': (0.8, 0.92)}, 'swirls': [(0.42, 0.58, 0.032)]},
 }
 

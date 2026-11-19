@@ -63,6 +63,10 @@
 | `assets/scenery/pavilion.png` | 정자 | 332×292 | 참고 화면 왼쪽 정자 (190~356, 500~646), 기둥 사이 하늘·꽃은 투명 |
 | `assets/scenery/banner_red.png`, `banner_pink.png` | 가지에 매단 현수막 | 52×176, 52×144 | 참고 화면 (356~386 / 398~424, 414~510) |
 
+| `assets/rider/haram_body.png`, `haram_tail.png` | 라이더 하람 (참고 화면의 청룡 탄 소녀), 몸·머리채 두 층 | 179×213 | 참고 이미지 (490, 448, 618, 600) 다각형 외곽 + 하늘·청룡 색 제거, 1.4배 (`tools/extract_rider.py`), 위치 정보 `haram.json` |
+| `assets/monsters/boss_{girin,hyeonmu,haetae,bonghwang,dragon}.png` | 2~6지역 보스 (어둠에 물든 수호 영물) | 각 원화 크기 | 기린·현무·해태·봉황 각성체, 청룡 각성체(흑룡) 원화 → 먹빛·진홍 색 변환 (`tools/make_monsters.py`) |
+| `assets/backgrounds/{sea,fire,paradise,snow}_cliffs.png`, `assets/scenery/{sea,fire,paradise,snow}_*.png` | 지역 테마판 | — | 참고 화면 조각의 색 보정 (`extract_backdrop.py`, `extract_scenery.py`) |
+
 ### 2-2. 영물 원화 보정 (2026-11-19)
 - 기린 유체·각성체: 얼굴·턱의 흰 털이 종이색과 같아 배경으로 지워지던 문제 → 얼굴 다각형을 그림으로 채우고 원화 같은 갈색 외곽선 1px (`extract_beasts.py` 의 `fill`)
 - 기린 유체·성장체·각성체 (2차): 사용자 재요청("턱 쪽을 아예 하얗게")으로 턱·수염·목 아래의 남은 틈을 흰 털로 채움 — 원래 선·무늬는 위에 그대로 (`retouch.whiten`, 설정은 `WHITEN`)

@@ -6,6 +6,7 @@ import { MOUNTS, MOUNT_ORDER, SKILLS, mountStats } from '../../src/data/mounts.t
 import { PRODUCTS } from '../../src/data/products.ts';
 import { COSMETICS } from '../../src/data/cosmetics.ts';
 import { STAGES } from '../../src/data/maps/wolha.ts';
+import { REGIONS } from '../../src/data/regions.ts';
 import { MONSTERS } from '../../src/data/monsters.ts';
 import { MOUNT_ART } from '../../src/data/mountArt.ts';
 import { ITEMS } from '../../src/data/items.ts';
@@ -166,7 +167,7 @@ test('데이터 무결성: 9종 영물·기술·일러스트', () => {
     assert.deepEqual(d.stages.map((s) => s.minLevel), [1, 10, 30]);
   }
   // 이번 빌드에서 획득 가능한 영물은 MVP 3종
-  assert.deepEqual(MOUNT_ORDER.filter((id) => MOUNTS[id].obtainable), ['wolf', 'hawk', 'cheongryong']);
+  assert.deepEqual(MOUNT_ORDER.filter((id) => MOUNTS[id].obtainable), MOUNT_ORDER, '9종 모두 획득 가능 (2~6지역 수호 영물·주작 불씨)');
   // 청룡 각성체는 자유 비행
   assert.ok(MOUNTS.cheongryong.stages[2].movement.flight);
   assert.ok(!MOUNTS.cheongryong.stages[0].movement.flight);
@@ -176,7 +177,7 @@ test('상점: 판매 상품은 실제 꾸미기 아이템을 지급하고 서버
   for (const p of PRODUCTS) {
     assert.ok(p.price > 0);
     if (!p.available) continue;
-    assert.ok(p.grants.length > 0, `${p.id} 지급 아이템`);
+    assert.ok(p.grants.length > 0 || p.effect, `${p.id} 지급 아이템 또는 효과`);
     for (const g of p.grants) assert.ok(COSMETICS[g], `${p.id} → ${g}`);
     if (p.mount) assert.ok(MOUNTS[p.mount].obtainable, `${p.id}: 획득 불가 영물의 스킨을 판매하면 안 됨`);
     assert.equal(SERVER_PRICES[p.id]?.amount, p.price, `${p.id} 서버 가격`);
@@ -185,8 +186,11 @@ test('상점: 판매 상품은 실제 꾸미기 아이템을 지급하고 서버
   assert.ok(PRODUCTS.every((p) => ['skin', 'decor', 'outfit', 'package', 'pass'].includes(p.category)));
 });
 
-test('스테이지 데이터: 6개 구간, 좌표가 맵 안에 있고 참조가 유효', () => {
-  assert.deepEqual(STAGES.map((s) => s.id), ['1-1', '1-2', '1-3', '1-4', '1-5', '1-6']);
+test('스테이지 데이터: 6지역 × 6구간, 좌표가 맵 안에 있고 참조가 유효', () => {
+  assert.equal(STAGES.length, 36);
+  assert.deepEqual(STAGES.slice(0, 6).map((s) => s.id), ['1-1', '1-2', '1-3', '1-4', '1-5', '1-6']);
+  assert.equal(new Set(STAGES.map((s) => s.id)).size, 36, '구간 id 중복 없음');
+  for (let r = 1; r <= 6; r++) assert.ok(STAGES.find((s) => s.id === `${r}-6`)?.boss, `${r}-6 보스`);
   for (const s of STAGES) {
     const inside = (x: number, y: number) => x >= 0 && x <= s.width && y >= 0 && y <= s.height;
     assert.ok(inside(s.spawn.x, s.spawn.y), `${s.id} spawn`);
@@ -203,6 +207,41 @@ test('스테이지 데이터: 6개 구간, 좌표가 맵 안에 있고 참조가
   assert.equal(shards.length, 3);
   assert.ok(STAGES.find((s) => s.id === '1-3')?.shrine);
   assert.ok(STAGES.find((s) => s.id === '1-6')?.boss);
+  // 상자·고서·픽업 id 는 전체에서 겹치지 않아야 저장 기록이 섞이지 않는다
+  const ids = STAGES.flatMap((s) => [...s.chests.map((c) => c.id), ...s.pickups.filter((p) => p.type !== 'coin').map((p) => p.id)]);
+  assert.equal(new Set(ids).size, ids.length, '상자·고서 id 중복');
+});
+
+test('생성된 구간(2~6지역): 기본 늑대로 갈 수 있는 규칙', () => {
+  for (const s of STAGES.filter((x) => !x.id.startsWith('1-'))) {
+    const gs = [...s.ground].sort((a, b) => a.x0 - b.x0);
+    assert.ok(gs[0].x0 === 0 && gs[gs.length - 1].x1 === s.width, `${s.id} 처음·끝 땅`);
+    for (let i = 1; i < gs.length; i++) {
+      const gap = gs[i].x0 - gs[i - 1].x1;
+      const rise = gs[i - 1].top - gs[i].top; // 위로 올라가는 높이
+      assert.ok(rise <= 100, `${s.id}: ${gs[i].x0} 오르막 ${rise}px`);
+      if (gap <= 0) continue;
+      // 틈: 200px 이하 / 다리 / 구름 발판 사슬(가로 간격 ≤ 70, 높이 차 ≤ 100)
+      if (gap <= 200) continue;
+      const bridge = s.platforms.some((p) => p.style === 'bridge' && p.x <= gs[i - 1].x1 + 5 && p.x + p.w >= gs[i].x0 - 5);
+      if (bridge) continue;
+      const clouds = s.platforms.filter((p) => p.style === 'cloud' && p.x >= gs[i - 1].x1 - 10 && p.x + p.w <= gs[i].x0 + 10 && p.y > gs[i - 1].top - 200).sort((a, b) => a.x - b.x);
+      assert.ok(clouds.length > 0, `${s.id}: ${gs[i - 1].x1}~${gs[i].x0} 틈 ${gap}px 건널 방법 없음`);
+      const hops = [gs[i - 1].x1, ...clouds.flatMap((c) => [c.x, c.x + c.w]), gs[i].x0];
+      for (let k = 0; k + 1 < hops.length; k += 2) assert.ok(hops[k + 1] - hops[k] <= 220, `${s.id}: 구름 사이 ${hops[k + 1] - hops[k]}px`);
+      for (const c of clouds) assert.ok(gs[i - 1].top - c.y <= 120, `${s.id}: 구름 높이 ${gs[i - 1].top - c.y}px`);
+    }
+    for (const h of s.hazards) assert.ok(h.w <= 180, `${s.id} 가시 폭`);
+    if (!s.boss) assert.ok(s.chests.length >= 1 && s.chests.length <= 4, `${s.id} 상자 ${s.chests.length}`);
+    assert.ok(s.checkpoints.length >= 1 || s.width < 3500, `${s.id} 석등`);
+  }
+});
+
+test('지역 수호 영물: 정화하면 합류할 영물이 겹치지 않고, 9종 모두 얻을 수 있다', () => {
+  const guardians = REGIONS.map((r) => r.guardian).filter(Boolean);
+  assert.equal(new Set(guardians).size, guardians.length);
+  for (const r of REGIONS) assert.ok(MONSTERS[r.bossId], `${r.name} 보스 ${r.bossId}`);
+  for (const id of Object.keys(MOUNTS)) assert.ok(MOUNTS[id as keyof typeof MOUNTS].obtainable, `${id} 획득 가능`);
 });
 
 test('스테이지 기본 경로: 지면 사이 틈은 발판 없이도 기본 점프(약 260px)로 건널 수 있거나 발판이 있다', () => {
