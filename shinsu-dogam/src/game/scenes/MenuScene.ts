@@ -13,7 +13,10 @@ import { expToNext, STONE_EXP } from '../../systems/state.ts';
 import { ensurePortrait, ensureRider } from '../textures.ts';
 import { GAME_W, GAME_H, COLORS } from '../config.ts';
 import { audio } from '../../systems/audio.ts';
-import { payments } from '../../services/payment/PaymentService.ts';
+import { payments, isLive } from '../../services/payment/PaymentService.ts';
+import { syncWithServer } from '../../services/payment/returnHandler.ts';
+import { applyPurchase, revokePurchase } from '../../systems/purchase.ts';
+import RELEASE from '../../../release.config.json';
 import { analytics } from '../../services/analytics/Analytics.ts';
 import { overlayQueue } from '../overlayQueue.ts';
 import * as L from '../../systems/live.ts';
@@ -48,6 +51,9 @@ export class MenuScene extends Phaser.Scene {
   }
 
   create() {
+    // 플레이 중 HUD(월드가 맨 위로 올려 둠) 위에 그려지도록 — 연출(Overlay)만 더 위
+    this.scene.bringToTop();
+    if (this.scene.get('Overlay')) this.scene.bringToTop('Overlay');
     this.add.rectangle(0, 0, GAME_W, GAME_H, 0x0b0912, 0.6).setOrigin(0).setInteractive();
     panel(this, X0, Y0, W, H);
     this.tabBtns = TABS.map(([t, label], i) => {
@@ -520,7 +526,7 @@ export class MenuScene extends Phaser.Scene {
     this.t(c, X0 + 40, Y0 + 82, '상점', 30, COLORS.text, { title: true });
     const banner = this.add.rectangle(X0 + 160, Y0 + 84, 700, 34, 0x3c3550).setOrigin(0).setStrokeStyle(2, 0xe2b14c);
     c.add(banner);
-    this.t(c, X0 + 176, Y0 + 90, `테스트 모드 · 실제 결제가 이루어지지 않습니다 (결제 연동 전)  ·  뽑기(확률형) 없음 · 정해진 보상만`, 15, '#ffe6a6');
+    this.t(c, X0 + 176, Y0 + 90, isLive() ? '안전 결제: 토스페이먼츠  ·  뽑기(확률형) 없음 · 정해진 보상만  ·  하루 결제 5만 원 미만' : `테스트 모드 · 실제 결제가 이루어지지 않습니다  ·  뽑기(확률형) 없음 · 정해진 보상만`, 15, '#ffe6a6');
     const cats: [ProductCategory, string][] = [['skin', '영물 스킨'], ['decor', '영물 장식'], ['outfit', '라이더 의상'], ['package', '패키지'], ['pass', '수행록·정기권']];
     cats.forEach(([k, label], i) => {
       c.add(button(this, X0 + 100 + i * 150, Y0 + 150, 140, 42, label, () => { this.shopCat = k; this.scrollY = 0; this.render(); }, this.shopCat === k ? 'primary' : 'normal', 16));
@@ -576,10 +582,11 @@ export class MenuScene extends Phaser.Scene {
       const prod = PRODUCTS.find((x) => x.id === pc.productId);
       const y = Y0 + 182 + i * 62;
       this.t(c, X0 + 940, y, `${prod?.name ?? pc.productId} · ${pc.price.toLocaleString('ko-KR')}원`, 14, '#3a2a2a');
-      this.t(c, X0 + 940, y + 20, pc.status === 'paid' ? '결제 완료(테스트)' : '환불됨', 12, pc.status === 'paid' ? '#2f8a7a' : '#8a3a2a');
+      this.t(c, X0 + 940, y + 20, pc.status === 'paid' ? (pc.test ? '결제 완료(테스트)' : '결제 완료') : '환불됨', 12, pc.status === 'paid' ? '#2f8a7a' : '#8a3a2a');
       if (pc.status === 'paid') c.add(button(this, X0 + 1100, y + 16, 70, 30, '환불', () => this.refund(pc.orderId), 'normal', 13));
     });
-    this.t(c, X0 + 940, hy, '※ 실서비스에서는 구매·환불·복구를\n서버 기록으로 검증합니다.\n청약철회 정책은 출시 전 확정.', 12, '#7a5a3a');
+    this.t(c, X0 + 940, hy - 20, isLive() ? `※ 구매는 서버에 기록되어 기기를 바꿔도\n설정 > 구매 복구로 되찾을 수 있어요.\n환불: ${RELEASE.refundDays}일 이내 미사용 상품 (환불 정책)` : '※ 판매 빌드에서는 구매·환불·복구를\n서버 기록으로 검증합니다.', 12, '#7a5a3a');
+    this.t(c, X0 + 40, Y0 + H - 22, businessLine(), 11, '#7a6a5a');
   }
 
   private buy(productId: string) {
@@ -590,16 +597,19 @@ export class MenuScene extends Phaser.Scene {
       toast(this, `하루 결제 한도(5만 원 미만)를 넘을 수 없어요. 오늘 결제: ${st.spentToday().toLocaleString('ko-KR')}원`, '#ffb0a0', 120, 2600);
       return;
     }
-    confirmBox(this, `${p.name}\n${p.price.toLocaleString('ko-KR')}원 (부가세 포함)\n\n테스트 모드: 실제로 청구되지 않습니다.`, async () => {
+    const live = isLive();
+    const msg = live
+      ? `${p.name}\n${p.price.toLocaleString('ko-KR')}원 (부가세 포함)\n\n토스페이먼츠 결제창으로 이동합니다.\n디지털 상품 특성상 지급 후 사용(장착·보상 받기)하면\n청약철회가 제한될 수 있어요 (환불 정책 참고)`
+      : `${p.name}\n${p.price.toLocaleString('ko-KR')}원 (부가세 포함)\n\n테스트 모드: 실제로 청구되지 않습니다.`;
+    confirmBox(this, msg, async () => {
       analytics.track('purchase_start', { product: p.id, price: p.price, mode: payments.mode });
-      const order = await payments.createOrder(p);
-      const res = await payments.pay(order);
-      if (res.ok) {
-        st.grantCosmetics(p.grants);
-        if (p.effect === 'pass_premium') st.data.pass.premium = true;
-        if (p.effect === 'monthly') L.activateMonthly(st);
-        st.data.purchases.push({ orderId: order.orderId, productId: p.id, price: p.price, at: Date.now(), test: res.test, status: 'paid' });
-        const eq = st.autoEquip(p.grants);
+      try {
+        const order = await payments.createOrder(p, st.data.account.customerKey);
+        st.save(); // 결제창으로 떠나기 전에 진행 저장
+        const res = await payments.pay(order, st.data.account.customerKey);
+        if (res.pending) return; // 결제창으로 이동 — 돌아오면 부팅 때 서버 승인·지급
+        if (!res.ok) { toast(this, res.message ?? '결제 실패', '#ffb0a0', 120); return; }
+        const eq = applyPurchase(st, p.id, order.orderId, p.price, res.test);
         for (const g of eq.equipped) if (COSMETICS[g]?.kind === 'outfit') ensureRider(this, g);
         st.save();
         this.applyToWorld();
@@ -607,9 +617,11 @@ export class MenuScene extends Phaser.Scene {
         audio.play('chest');
         this.render();
         if (p.effect) toast(this, p.effect === 'pass_premium' ? '수행록 프리미엄이 열렸어요! 수행록 탭에서 보상을 받으세요' : '달빛 정기권 시작! 영기석 10 지급 · 일일 탭에서 매일 받기', '#ffe6a6', 120, 3200);
-        else this.purchaseDone(p.name, eq);
-      } else toast(this, res.message ?? '결제 실패', '#ffb0a0', 120);
-    }, '테스트 구매');
+        else this.purchaseDone(p.name, { equipped: eq.equipped, needMount: eq.needMount as MountId[] });
+      } catch (e) {
+        toast(this, (e as Error).message || '결제를 시작하지 못했어요', '#ffb0a0', 120, 2800);
+      }
+    }, live ? '결제하기' : '테스트 구매');
   }
 
   /** 플레이 중에 연 메뉴라면 영물·라이더 외형을 즉시 다시 그린다 */
@@ -628,7 +640,7 @@ export class MenuScene extends Phaser.Scene {
     for (const m of eq.needMount) lines.push(`※ ${MOUNTS[m].name}을(를) 얻으면 이 스킨을 장착할 수 있어요`);
     const t1 = txt(this, GAME_W / 2, GAME_H / 2 - 112, `${name} 구매 완료!`, 30, COLORS.text, { title: true }).setOrigin(0.5);
     const t2 = txt(this, GAME_W / 2, GAME_H / 2 - 60, lines.join('\n'), 19, '#3a2a2a', { align: 'center', lineSpacing: 8 }).setOrigin(0.5, 0);
-    const t3 = txt(this, GAME_W / 2, GAME_H / 2 + 74, '테스트 결제 · 실제 청구 없음 · 영물 탭에서 바꿔 낄 수 있어요', 14, '#7a5a3a').setOrigin(0.5);
+    const t3 = txt(this, GAME_W / 2, GAME_H / 2 + 74, isLive() ? '영물 탭·상점에서 바꿔 낄 수 있어요' : '테스트 결제 · 실제 청구 없음 · 영물 탭에서 바꿔 낄 수 있어요', 14, '#7a5a3a').setOrigin(0.5);
     const ok = button(this, GAME_W / 2, GAME_H / 2 + 120, 180, 50, '확인', () => layer.destroy(), 'primary');
     layer.add([dim, pnl, t1, t2, t3, ok]);
   }
@@ -637,14 +649,14 @@ export class MenuScene extends Phaser.Scene {
     const st = store.state;
     const pc = st.data.purchases.find((x) => x.orderId === orderId);
     if (!pc) return;
+    if (isLive()) {
+      confirmBox(this, `환불은 고객센터로 요청해 주세요.\n${RELEASE.business.email || '[고객센터 이메일 — 출시 전 입력]'}\n주문번호: ${orderId}\n(환불 정책: 설정 > 환불 정책)`, () => undefined, '확인');
+      return;
+    }
     confirmBox(this, '이 구매를 환불(테스트)할까요?\n지급된 꾸미기 아이템이 회수됩니다.', async () => {
       const r = await payments.refund(orderId);
       if (!r.ok) return;
-      pc.status = 'refunded';
-      const p = PRODUCTS.find((x) => x.id === pc.productId);
-      // 다른 유효 구매로도 받은 아이템은 남긴다
-      const still = new Set(st.data.purchases.filter((x) => x.status === 'paid').flatMap((x) => PRODUCTS.find((y) => y.id === x.productId)?.grants ?? []));
-      st.revokeCosmetics((p?.grants ?? []).filter((g) => !still.has(g)));
+      revokePurchase(st, orderId);
       st.save();
       analytics.track('purchase_refund', { product: pc.productId });
       this.render();
@@ -684,16 +696,39 @@ export class MenuScene extends Phaser.Scene {
     const rx = X0 + 660;
     this.t(c, rx, Y0 + 140, '정보', 20, COLORS.text, { title: true });
     this.t(c, rx, Y0 + 172, [
-      '신수도감 (神獸圖鑑) v0.1 프로토타입',
-      '영물 일러스트: 사용자 제공 원화 (영물 도감 이미지에서 추출)',
-      '배경·라이더·몬스터·UI: 코드로 그린 2D 일러스트',
-      '글꼴: 고운바탕·고운돋움·Noto Serif KR (SIL OFL 1.1)',
-      '음악·효과음: 웹오디오로 실시간 합성 (국악 5음계)',
-      '',
-      '개인정보 처리방침 · 이용약관 · 환불 정책:',
-      '정식 출시 전 공개 예정 (현재는 이 브라우저에만',
-      '진행 상황을 저장하며 서버로 보내지 않습니다)',
-    ].join('\n'), 14, '#3a2a2a', { lineSpacing: 6 });
+      `신수도감 (神獸圖鑑) v${RELEASE.version}${isLive() ? '' : ' · 테스트 결제'}`,
+      '글꼴: 고운바탕·고운돋움·Noto Serif KR (SIL OFL 1.1) · 엔진: Phaser (MIT)',
+      '진행 상황은 이 브라우저에 저장됩니다.',
+    ].join('\n'), 13, '#3a2a2a', { lineSpacing: 6 });
+    const open = (f: string) => window.open(`legal/${f}.html`, '_blank', 'noopener');
+    c.add(button(this, rx + 60, Y0 + 262, 116, 36, '이용약관', () => open('terms'), 'normal', 14));
+    c.add(button(this, rx + 182, Y0 + 262, 116, 36, '개인정보', () => open('privacy'), 'normal', 14));
+    c.add(button(this, rx + 304, Y0 + 262, 116, 36, '환불 정책', () => open('refund'), 'normal', 14));
+    // 구매 복구 (기기 변경·저장 삭제 후)
+    this.t(c, rx, Y0 + 300, '구매 복구 코드', 18, COLORS.text, { title: true });
+    this.t(c, rx, Y0 + 328, st.data.account.customerKey, 16, '#c3352c', { title: true });
+    this.t(c, rx, Y0 + 352, '기기를 바꾸면 이 코드를 입력해 구매한 상품을 되찾을 수 있어요.\n다른 사람에게 알려 주지 마세요.', 12, '#5a4a3a', { lineSpacing: 4 });
+    c.add(button(this, rx + 60, Y0 + 410, 116, 36, '코드 복사', () => {
+      navigator.clipboard?.writeText(st.data.account.customerKey).then(() => toast(this, '복사했어요'), () => toast(this, st.data.account.customerKey));
+    }, 'normal', 14));
+    c.add(button(this, rx + 182, Y0 + 410, 116, 36, '코드 입력', () => {
+      const v = (window.prompt('구매 복구 코드를 입력하세요') ?? '').trim().toUpperCase();
+      if (!/^SD[0-9A-Z]{10,40}$/.test(v)) { if (v) toast(this, '코드 형식이 맞지 않아요', '#ffb0a0'); return; }
+      st.data.account.customerKey = v;
+      st.save();
+      this.restore();
+    }, 'normal', 14));
+    c.add(button(this, rx + 304, Y0 + 410, 116, 36, '구매 복구', () => this.restore(), 'primary', 14));
+    this.t(c, rx, Y0 + 446, businessLine(), 11, '#7a6a5a', { wordWrap: { width: 470 } });
+  }
+
+  private async restore() {
+    if (!isLive()) { toast(this, '테스트 결제 빌드에서는 서버 구매 기록이 없어요'); return; }
+    const r = await syncWithServer(store.state);
+    if (!r) { toast(this, '서버에 연결하지 못했어요. 잠시 후 다시 시도해 주세요', '#ffb0a0'); return; }
+    this.applyToWorld();
+    toast(this, `구매 기록을 맞췄어요 (복구 ${r.restored}건)`);
+    this.render();
   }
 
   private apply() {
@@ -702,4 +737,11 @@ export class MenuScene extends Phaser.Scene {
     store.state.save();
     this.render();
   }
+}
+
+/** 사업자 정보 한 줄 (전자상거래법 표시 항목 — release.config.json) */
+function businessLine() {
+  const b = RELEASE.business;
+  if (!b.name) return '사업자 정보: [출시 전 release.config.json 에 입력]';
+  return `상호 ${b.name} · 대표 ${b.ceo} · 사업자등록번호 ${b.regNo} · 통신판매업 ${b.mailOrderNo} · ${b.address} · ${b.email} · ${b.phone}`;
 }

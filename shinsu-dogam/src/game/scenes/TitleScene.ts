@@ -2,6 +2,8 @@ import Phaser from 'phaser';
 import { Backdrop } from '../world/Backdrop.ts';
 import { txt, button, confirmBox } from '../../ui/widgets.ts';
 import { store } from '../ctx.ts';
+import { isLive } from '../../services/payment/PaymentService.ts';
+import RELEASE from '../../../release.config.json';
 import { GAME_W, GAME_H, COLORS } from '../config.ts';
 import { UI_TEXT } from '../uiText.ts';
 import { ensureMount, ensureRider, riderMeta } from '../textures.ts';
@@ -64,7 +66,7 @@ export class TitleScene extends Phaser.Scene {
     y += 68;
     button(this, bx, y, 145, 52, UI_TEXT.shop, () => this.openMenu('shop'));
     button(this, bx + 155, y, 145, 52, UI_TEXT.settings, () => this.openMenu('settings'));
-    txt(this, 16, GAME_H - 28, 'v0.1 프로토타입 · 영물 일러스트: 사용자 제공 원화 · © 신수도감', 14, '#f6ead0').setAlpha(0.8);
+    txt(this, 16, GAME_H - 28, `v${RELEASE.version}${isLive() ? '' : ' · 테스트 결제'} · © 신수도감`, 14, '#f6ead0').setAlpha(0.8);
     if (!store.storageAvailable) txt(this, 16, GAME_H - 52, '※ 이 브라우저에서는 저장소를 쓸 수 없어 진행 상황이 저장되지 않습니다.', 14, '#ffd6a0');
 
     // 떨어지는 꽃잎
@@ -76,9 +78,25 @@ export class TitleScene extends Phaser.Scene {
       store.giftJustApplied = false;
       this.giftNotice();
     }
+    if (store.payNotice) {
+      const n = store.payNotice;
+      store.payNotice = null;
+      this.notice(n.title, n.body, n.ok);
+    }
     this.input.once('pointerdown', () => audio.unlock());
     this.input.keyboard?.once('keydown', () => audio.unlock());
     void COLORS;
+  }
+
+  private notice(title: string, body: string, ok: boolean) {
+    const layer = this.add.container(0, 0).setDepth(3000);
+    const dim = this.add.rectangle(0, 0, GAME_W, GAME_H, 0x000000, 0.55).setOrigin(0).setInteractive();
+    const p = panel(this, GAME_W / 2 - 330, GAME_H / 2 - 150, 660, 300);
+    const t1 = txt(this, GAME_W / 2, GAME_H / 2 - 100, title, 32, ok ? COLORS.text : '#8a2a22', { title: true }).setOrigin(0.5);
+    const t2 = txt(this, GAME_W / 2, GAME_H / 2 - 50, body, 19, '#3a2a2a', { align: 'center', lineSpacing: 8, wordWrap: { width: 600 } }).setOrigin(0.5, 0);
+    const b = button(this, GAME_W / 2, GAME_H / 2 + 100, 200, 56, '확인', () => layer.destroy(), 'primary', 22);
+    layer.add([dim, p, t1, t2, b]);
+    if (ok) audio.play('chest');
   }
 
   private giftNotice() {

@@ -9,3 +9,5 @@ test-results
 dist-artifact
 art-ref
 __pycache__/
+release/
+dist-paytest

@@ -22,7 +22,10 @@ export class Player {
   vis: Phaser.GameObjects.Container;
   mountSpr!: Phaser.GameObjects.Sprite;
   riderSpr!: Phaser.GameObjects.Sprite;
-  decorSpr?: Phaser.GameObjects.Image;
+  /** 목에 단 장식들 (매듭·옥·방울 — 여러 개 동시에) */
+  decorSprs: Phaser.GameObjects.Image[] = [];
+  /** 근두운 (네발 영물·현무가 날 때) */
+  flyCloud?: Phaser.GameObjects.Image;
   shieldSpr: Phaser.GameObjects.Image;
   trail?: Phaser.GameObjects.Particles.ParticleEmitter;
   def!: MountDef;
@@ -74,6 +77,7 @@ export class Player {
   lastX = 0;
   private afterT = 0;
   private trailT = 0;
+  private pawFlip = false;
   private flashT = 0;
 
   constructor(private scene: WorldScene, x: number, y: number) {
@@ -126,25 +130,38 @@ export class Player {
     this.riderSpr = this.scene.add.sprite(0, 0, this.riderKey, 'idle_0').setOrigin(rm.ox, rm.oy);
     const visH = info.h * info.scale;
     this.riderSpr.setScale(Phaser.Math.Clamp(visH / 150, 0.56, 0.86) * rm.scaleMul);
-    this.vis.add([this.mountSpr, this.riderSpr]);
-    const decor = store.state.data.cosmetics.decor[0];
-    this.decorSpr = undefined;
-    if (decor) {
-      const icon = decor === 'decor_knot' ? 'icon_knot' : decor === 'decor_jade' ? 'icon_jade' : 'icon_bell';
-      this.decorSpr = this.scene.add.image(0, 0, icon).setScale(0.42);
-      this.vis.add(this.decorSpr);
+    // 근두운: 네발 영물·현무는 날 때 구름을 타고 난다
+    this.flyCloud = (info.motion === 'quad' || info.motion === 'shell') && this.mv.flight
+      ? this.scene.add.image(0, 0, 'fly_cloud').setVisible(false).setScale((info.w * info.scale * 1.15) / 220)
+      : undefined;
+    this.vis.add([...(this.flyCloud ? [this.flyCloud] : []), this.mountSpr, this.riderSpr]);
+    // 장식: 목에 매달려 흔들림 (장착한 것 모두)
+    this.decorSprs = [];
+    const ornScale = Phaser.Math.Clamp(visH / 150, 0.7, 1.15) * 0.95;
+    for (const d of store.state.data.cosmetics.decor) {
+      const key = d === 'decor_knot' ? 'orn_knot' : d === 'decor_jade' ? 'orn_jade' : d === 'decor_bell' ? 'orn_bell' : null;
+      if (!key || !COSMETICS[d]) continue;
+      const img = this.scene.add.image(0, 0, key).setOrigin(0.5, 0.02).setScale(ornScale);
+      this.decorSprs.push(img);
+      this.vis.add(img);
     }
-    // 이동 효과 (꾸미기)
+    // 이동 효과 (꾸미기) — 진짜로 보이게: 발자국은 땅에 찍히고, 구름·꽃잎은 뒤로 흩날린다
     this.trail?.destroy();
     this.trail = undefined;
     const trail = store.state.data.cosmetics.trail;
-    if (trail && COSMETICS[trail]) {
-      const key = trail === 'trail_petal' ? 'petal' : trail === 'trail_cloud' ? 'fx_dust' : 'wisp';
-      this.trail = this.scene.add.particles(0, 0, key, {
-        lifespan: trail === 'trail_cloud' ? 900 : 1200, speedX: { min: -40, max: 40 }, speedY: { min: -30, max: 10 },
-        scale: { start: trail === 'trail_cloud' ? 1.2 : 0.9, end: 0.2 }, alpha: { start: 0.9, end: 0 }, rotate: { min: 0, max: 360 },
-        emitting: false, tint: trail === 'trail_footprint' ? 0x9be3ff : 0xffffff,
-      }).setDepth(9);
+    if (trail === 'trail_footprint') {
+      this.trail = this.scene.add.particles(0, 0, 'fx_paw', {
+        lifespan: 2400, speed: 0, scaleX: 0.95, scaleY: 0.55, alpha: { start: 1, end: 0 }, emitting: false,
+      }).setDepth(-8.5);
+    } else if (trail === 'trail_cloud') {
+      this.trail = this.scene.add.particles(0, 0, 'fx_cloudpuff', {
+        lifespan: 1200, speedX: { min: -30, max: 30 }, speedY: { min: -26, max: -6 }, scale: { start: 0.45, end: 1.05 }, alpha: { start: 0.95, end: 0 }, emitting: false,
+      }).setDepth(9.5);
+    } else if (trail === 'trail_petal') {
+      this.trail = this.scene.add.particles(0, 0, 'petal', {
+        lifespan: 1800, speedX: { min: -80, max: 80 }, speedY: { min: -110, max: -20 }, gravityY: 90, scale: { min: 1.2, max: 1.9 }, tint: [0xffffff, 0xffd6e2, 0xff9ab8],
+        rotate: { start: 0, end: 540 }, alpha: { start: 1, end: 0 }, emitting: false,
+      }).setDepth(10.5);
     }
     this.flying = false;
     this.diving = null;
@@ -364,6 +381,7 @@ export class Player {
     let manim: 'idle' | 'run' | 'fly' | 'atk' = 'idle';
     let ranim = 'idle';
     if (this.atkAnimT > 0) { manim = 'atk'; ranim = 'attack'; }
+    else if (this.flying && this.flyCloud) { manim = Math.abs(vx) > 60 ? 'run' : 'idle'; ranim = 'fly'; } // 근두운 위: 서서/달리듯
     else if (this.flying || !this.grounded) { manim = 'fly'; ranim = 'fly'; }
     else if (Math.abs(vx) > 40 || this.dashT > 0) { manim = 'run'; ranim = 'run'; }
     if (this.attackT > 0) ranim = 'attack';
@@ -372,7 +390,7 @@ export class Player {
     const akey = `${key}:${manim}`;
     if (this.mountSpr.anims.currentAnim?.key !== akey || (manim === 'atk' && !this.mountSpr.anims.isPlaying && this.atkAnimT > 0.2)) this.mountSpr.anims.play(akey, manim !== 'atk');
     let sp = 1;
-    if (manim === 'run') sp = Phaser.Math.Clamp(Math.abs(vx) / this.mv.runSpeed, 0.5, 1.6);
+    if (manim === 'run') sp = this.flying ? 0.45 : Phaser.Math.Clamp(Math.abs(vx) / this.mv.runSpeed, 0.5, 1.6);
     else if (manim === 'fly') sp = this.gliding && !this.flying ? 0.5 : this.flying ? (vy < -80 ? 1.5 : 1) : info.motion === 'bird' || info.motion === 'serpent' ? 1.1 : 0.6;
     this.mountSpr.anims.timeScale = this.dashT > 0 ? 2 : sp;
     this.riderSpr.anims.play(`${this.riderKey}:${ranim}`, true);
@@ -391,9 +409,18 @@ export class Player {
     let seatY = -(1 - info.seat[1] - so[1]) * info.h * sc;
     if (this.mt.seatPx) { seatX = this.mt.seatPx[0] * this.mt.scale * this.facing; seatY = this.mt.seatPx[1] * this.mt.scale; }
     this.riderSpr.setPosition(seatX, seatY);
-    if (this.decorSpr) {
-      this.decorSpr.setPosition(seatX + 0.2 * info.w * sc * this.facing, seatY + 0.18 * info.h * sc);
-      this.decorSpr.setRotation(Math.sin(this.scene.time.now / 160) * 0.25);
+    // 장식: 안장 앞쪽(목) 아래로 매달려 흔들림
+    const now = this.scene.time.now;
+    const swingAmp = Math.abs(vx) > 40 ? 0.45 : 0.18;
+    this.decorSprs.forEach((d, k) => {
+      d.setPosition(seatX + (0.17 + k * 0.05) * info.w * sc * this.facing, seatY + (0.12 + k * 0.02) * info.h * sc);
+      d.setRotation(Math.sin(now / 150 + k * 1.3) * swingAmp - (Math.abs(vx) > 40 ? 0.3 * this.facing : 0));
+    });
+    // 근두운
+    if (this.flyCloud) {
+      const on = this.flying;
+      this.flyCloud.setVisible(on);
+      if (on) this.flyCloud.setPosition(0, 4 + Math.sin(now / 260) * 4).setFlipX(this.facing < 0);
     }
     // 기울기
     let tilt = 0;
@@ -418,12 +445,30 @@ export class Player {
       this.shieldSpr.setAlpha(0.6 + Math.sin(this.scene.time.now / 90) * 0.2);
     }
     // 꾸미기 이동 효과
-    if (this.trail && Math.abs(vx) > 80) {
+    const tr = store.state.data.cosmetics.trail;
+    if (this.trail && (Math.abs(vx) > 60 || this.flying)) {
       this.trailT -= dt;
       if (this.trailT <= 0) {
-        this.trailT = store.state.data.cosmetics.trail === 'trail_footprint' ? 0.12 : 0.05;
-        this.trail.emitParticleAt(b.center.x - this.facing * 30, b.bottom - (store.state.data.cosmetics.trail === 'trail_footprint' ? 2 : 20));
+        if (tr === 'trail_footprint') {
+          // 땅에 닿아 달릴 때만, 앞발·뒷발 번갈아 찍힘
+          if (this.grounded) {
+            this.trailT = 0.15;
+            this.pawFlip = !this.pawFlip;
+            this.trail.emitParticleAt(b.center.x - this.facing * (this.pawFlip ? 18 : 40), b.bottom - (this.pawFlip ? 6 : 2));
+          }
+        } else if (tr === 'trail_cloud') {
+          this.trailT = 0.07;
+          this.trail.emitParticleAt(b.center.x - this.facing * (b.width / 2 + 6), b.bottom - b.height * 0.35);
+        } else {
+          this.trailT = 0.06;
+          this.trail.emitParticleAt(b.center.x - this.facing * 20 + Phaser.Math.Between(-20, 20), b.top + Phaser.Math.Between(-10, 20), 3);
+        }
       }
+    }
+    // 금방울: 달릴 때 반짝임
+    if (this.decorSprs.length && Math.abs(vx) > 60 && store.state.data.cosmetics.decor.includes('decor_bell') && Math.random() < dt * 6) {
+      const bell = this.decorSprs[store.state.data.cosmetics.decor.indexOf('decor_bell')];
+      if (bell) this.scene.combat.sparks(this.vis.x + bell.x, this.vis.y + bell.y + 10, 1);
     }
   }
 

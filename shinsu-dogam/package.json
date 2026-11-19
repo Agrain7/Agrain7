@@ -1,7 +1,7 @@
 {
   "name": "shinsu-dogam",
   "private": true,
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "신수도감 (神獸圖鑑) — DIVINE BEASTS ATLAS: 한국 전통 영물을 타고 탐험하는 2D 횡스크롤 라이딩 웹게임",
   "type": "module",
   "scripts": {
@@ -11,7 +11,10 @@
     "typecheck": "tsc --noEmit",
     "test": "node --test tests/unit/*.test.ts",
     "test:e2e": "node tests/e2e/smoke.mjs",
-    "build:artifact": "node tools/build-artifact.mjs"
+    "build:artifact": "node tools/build-artifact.mjs",
+    "release": "node tools/release.mjs",
+    "release:live": "node tools/release.mjs --live",
+    "test:e2e:pay": "node tests/e2e/payment-live.mjs"
   },
   "dependencies": {
     "@fontsource/gowun-batang": "^5.3.0",

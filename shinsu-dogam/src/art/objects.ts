@@ -752,3 +752,82 @@ export function paintJoystickKnob(): HTMLCanvasElement {
   spiral(ctx, c0, c0, 22, 1.5, '#2f5fae', 4, Math.PI);
   return c;
 }
+
+/** 특별 발자국: 빛나는 영물 발자국 (땅에 찍혀 천천히 사라짐) */
+export function paintPawPrint(): HTMLCanvasElement {
+  const [c, ctx] = makeCanvas(56, 48);
+  glow(ctx, 28, 26, 26, '#4fc3ff', 0.75);
+  const pad = (x: number, y: number, rx: number, ry: number) => ellipse(ctx, x, y, rx, ry, 0, '#d6f6ff', '#1f7fc4', 2.4);
+  pad(28, 31, 11, 9);
+  pad(14, 17, 5, 6);
+  pad(23, 10, 5, 6);
+  pad(33, 10, 5, 6);
+  pad(42, 17, 5, 6);
+  return c;
+}
+
+/** 구름 꼬리: 크림색 소용돌이 구름 한 덩이 */
+export function paintCloudPuff(): HTMLCanvasElement {
+  const [c, ctx] = makeCanvas(70, 44);
+  for (const [x, y, r] of [[22, 26, 14], [36, 20, 16], [50, 27, 12], [34, 30, 14]] as const) circle(ctx, x, y, r, '#fbf3e2');
+  cloudSwirl(ctx, 35, 25, 0.9, 'rgba(251,243,226,0)', 'rgba(214,166,80,0.95)', false, 1.6);
+  ctx.strokeStyle = 'rgba(214,166,80,0.7)';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath(); ctx.arc(22, 26, 14, Math.PI * 0.7, Math.PI * 1.5); ctx.stroke();
+  return c;
+}
+
+/** 근두운: 네발 영물·현무가 타고 나는 구름 */
+export function paintFlyCloud(): HTMLCanvasElement {
+  const [c, ctx] = makeCanvas(220, 100);
+  ctx.translate(0, 8);
+  glow(ctx, 110, 40, 90, '#fff4d6', 0.35);
+  const puffs: [number, number, number][] = [[40, 42, 20], [70, 32, 26], [104, 28, 30], [140, 32, 26], [172, 42, 20], [100, 46, 26], [60, 48, 18], [150, 48, 18]];
+  for (const [x, y, r] of puffs) circle(ctx, x, y, r, '#fbf3e2', 'rgba(196,150,70,0.85)', 1.8);
+  for (const [x, y, r] of puffs) circle(ctx, x, y - 2, r - 3, '#fffaf0');
+  cloudSwirl(ctx, 66, 40, 1.0, 'rgba(0,0,0,0)', 'rgba(214,166,80,0.95)', true, 1.8);
+  cloudSwirl(ctx, 150, 40, 1.0, 'rgba(0,0,0,0)', 'rgba(214,166,80,0.95)', false, 1.8);
+  return c;
+}
+
+/** 영물 장식: 전통 매듭 / 옥 노리개 / 금방울 (목에 매달려 흔들림, 위쪽 가운데가 매다는 점) */
+export function paintOrnament(kind: 'knot' | 'jade' | 'bell'): HTMLCanvasElement {
+  const [c, ctx] = makeCanvas(40, 76);
+  ctx.strokeStyle = '#7a1f1a';
+  ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(20, 0); ctx.lineTo(20, 12); ctx.stroke();
+  if (kind === 'knot') {
+    // 매듭: 마름모꼴 엮음 + 술
+    ctx.save(); ctx.translate(20, 22); ctx.rotate(Math.PI / 4);
+    ctx.fillStyle = '#d0362c'; ctx.fillRect(-9, -9, 18, 18);
+    ctx.strokeStyle = '#7a1f1a'; ctx.lineWidth = 1.6; ctx.strokeRect(-9, -9, 18, 18);
+    ctx.strokeStyle = 'rgba(255,220,200,0.7)'; ctx.lineWidth = 1.2;
+    for (const d of [-4, 0, 4]) { ctx.beginPath(); ctx.moveTo(d, -9); ctx.lineTo(d, 9); ctx.moveTo(-9, d); ctx.lineTo(9, d); ctx.stroke(); }
+    ctx.restore();
+    for (const [x, y] of [[8, 22], [32, 22]] as const) circle(ctx, x, y, 4, '#d0362c', '#7a1f1a', 1.2);
+    circle(ctx, 20, 38, 3.5, '#e2b14c', '#7a5a1e', 1);
+  } else if (kind === 'jade') {
+    // 옥 노리개: 초록 옥 원판 + 금 장식
+    circle(ctx, 20, 26, 11, '#3fae8f', '#1f5e4e', 1.8);
+    circle(ctx, 20, 26, 4, '#fbf3e2', '#1f5e4e', 1);
+    ellipse(ctx, 16, 21, 3, 2, -0.6, 'rgba(255,255,255,0.6)');
+    goldDisc(ctx, 20, 41, 3.6, '#e2b14c');
+  } else {
+    // 금방울
+    const g = ctx.createRadialGradient(16, 20, 2, 20, 26, 14);
+    g.addColorStop(0, '#fff3c0'); g.addColorStop(0.5, '#f0c451'); g.addColorStop(1, '#a87418');
+    circle(ctx, 20, 26, 12, g, '#7a5a1e', 1.8);
+    ctx.strokeStyle = '#7a5a1e'; ctx.lineWidth = 1.6;
+    ctx.beginPath(); ctx.moveTo(10, 28); ctx.lineTo(30, 28); ctx.stroke();
+    circle(ctx, 20, 33, 2.5, '#5a3a10');
+    circle(ctx, 20, 41, 3, '#d0362c', '#7a1f1a', 1);
+  }
+  // 술 (붉은 실)
+  const tc = kind === 'jade' ? '#2f8a7a' : '#d0362c';
+  for (let k = -3; k <= 3; k++) {
+    ctx.strokeStyle = tc; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(20 + k, 44); ctx.quadraticCurveTo(20 + k * 1.6, 58, 20 + k * 2, 74); ctx.stroke();
+  }
+  ctx.fillStyle = '#e2b14c'; ctx.fillRect(15, 43, 10, 4);
+  return c;
+}

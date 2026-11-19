@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{title}} · 신수도감</title>
+<style>
+:root{--ink:#2a2030;--paper:#f6eedc;--line:#c9b48a;--accent:#b8322a}
+body{margin:0;background:var(--paper);color:var(--ink);font:16px/1.75 "Gowun Dodum","Apple SD Gothic Neo","Malgun Gothic",sans-serif}
+main{max-width:760px;margin:0 auto;padding:28px 18px 64px}
+h1{font-size:26px;margin:0 0 4px}h2{font-size:19px;margin:28px 0 6px;border-bottom:1px solid var(--line);padding-bottom:4px}
+.draft{background:#fff3d6;border:1px solid #e2b14c;border-radius:8px;padding:10px 14px;margin:14px 0;font-size:14px}
+table{border-collapse:collapse;width:100%;font-size:14px}td,th{border:1px solid var(--line);padding:6px 8px;text-align:left;vertical-align:top}
+.biz{margin-top:36px;font-size:13px;color:#5a4a3a;border-top:1px solid var(--line);padding-top:10px}
+a{color:var(--accent)}
+</style></head><body><main>
+<h1>{{title}}</h1>
+<div>시행일: {{effectiveDate}}</div>
+{{draftNotice}}
+{{body}}
+<div class="biz">상호 {{name}} · 대표자 {{ceo}} · 사업자등록번호 {{regNo}} · 통신판매업 신고번호 {{mailOrderNo}}<br>주소 {{address}} · 고객센터 {{email}} / {{phone}} · 개인정보 보호책임자 {{privacyOfficer}}</div>
+<p><a href="terms.html">이용약관</a> · <a href="privacy.html">개인정보 처리방침</a> · <a href="refund.html">환불 정책</a></p>
+</main></body></html>

@@ -50,7 +50,7 @@ npm run dev      # 게임 서버 실행
 | `npm run dev` | 개발 서버 (코드 수정 시 자동 새로고침) |
 | `npm run build` | 배포용 파일 생성 → `dist/` 폴더 |
 | `npm run preview` | 만든 배포용 파일을 미리보기 |
-| `npm test` | 게임 로직 단위 테스트 (33개) |
+| `npm test` | 게임 로직·서버 함수 단위 테스트 (42개) |
 | `npm run test:e2e` | 실제 브라우저로 플레이 흐름 자동 검사 25항목 (빌드 후 실행, 결과 스크린샷 `test-results/`) |
 | `python3 tools/extract_beasts.py` | 도감 원화 → 영물 27장 (기린 얼굴 채움·늑대/백호 입 다물기 보정 포함) |
 | `python3 tools/extract_boar.py && python3 tools/make_monsters.py` | 참고 화면 산돼지 3마리 + 비행 요괴·보스(원화 색 변환) → `public/assets/monsters/` |
@@ -59,6 +59,9 @@ npm run dev      # 게임 서버 실행
 | `python3 tools/extract_scenery.py` | 참고 화면 하늘·달·구름·숲·돌다리·정자·현수막 → `public/assets/scenery/` |
 | `npm run typecheck` | 타입 검사 |
 | `python3 tools/pack_sprites.py` | 받은 그림(`art-in/`) 검사·변환 → 게임에 자동 적용 ([ART_REQUEST](docs/ART_REQUEST.md)) |
+| `npm run release` | 출시 후보 묶음 (테스트 결제) → `release/*.zip` |
+| `npm run release:live` | **판매 빌드** (토스 실결제) — `release.config.json` 사업자 정보 + `VITE_TOSS_CLIENT_KEY` 필요, 없으면 거부 |
+| `npm run test:e2e:pay` | 판매 빌드 결제 흐름 자동 검사 (토스·서버는 가짜) |
 | `npm run build:artifact` | Claude 아티팩트(웹 페이지) 게시용 한 장짜리 페이지 생성 → `dist-artifact/` (Phaser는 CDN, 글꼴은 Google Fonts) |
 
 개발용 주소 옵션: `?debug` (숫자키 1~5 치트), `?debug&stage=1-4` (해당 구간 바로 시작)
@@ -74,8 +77,8 @@ npm run dev      # 게임 서버 실행
 
 자세한 내용: [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)
 
-> ⚠️ 실제 유료 판매는 아직 꺼져 있습니다. 상점은 **테스트 모드**(실제 청구 없음)이며,
-> 토스페이먼츠 실결제는 사업자 등록·PG 계약·서버 검증 배포 후에 켭니다. → [docs/RELEASE_CHECKLIST.md](docs/RELEASE_CHECKLIST.md)
+> 💳 결제: 기본 빌드는 **테스트 모드**(실제 청구 없음). 판매 빌드(`npm run release:live`)는 토스페이먼츠 결제창 + 서버 승인으로 동작하도록 준비되어 있고,
+> 사업자 등록·토스 가맹·Cloudflare 배포·테스트 키 시험을 마치면 켤 수 있습니다 → [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) 2절 · [docs/RELEASE_CHECKLIST.md](docs/RELEASE_CHECKLIST.md)
 
 ---
 

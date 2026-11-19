@@ -6,7 +6,7 @@ import { COSMETICS } from '../data/cosmetics.ts';
 import { STAGES } from '../data/maps/wolha.ts';
 import { newLive, type LiveData } from './live.ts';
 
-export const SAVE_VERSION = 3;
+export const SAVE_VERSION = 4;
 export const SAVE_KEY = 'shinsu-dogam.save';
 
 export interface MountState {
@@ -41,6 +41,16 @@ export interface SaveData extends LiveData {
   tutorialDone: boolean;
   /** 적용된 선물(플레이테스트 지급) id */
   gifts: string[];
+  /** 구매 계정 키 (토스 customerKey 겸 '구매 복구 코드') — 서버 구매 기록과 연결 */
+  account: { customerKey: string };
+}
+
+/** 구매 계정 키: 영문·숫자 28자 (토스 customerKey 허용 문자 안, 추측하기 어렵게) */
+export function newCustomerKey(): string {
+  const a = new Uint8Array(16);
+  if (typeof crypto !== 'undefined' && crypto.getRandomValues) crypto.getRandomValues(a);
+  else for (let i = 0; i < a.length; i++) a[i] = Math.floor(Math.random() * 256);
+  return 'SD' + Array.from(a, (b) => b.toString(36).padStart(2, '0').slice(-2)).join('').toUpperCase().slice(0, 26);
 }
 
 export function expToNext(level: number): number {
@@ -72,6 +82,7 @@ export function newSave(now = Date.now()): SaveData {
     settings: { music: 0.5, sfx: 0.7, touch: 'auto', showFps: false },
     tutorialDone: false,
     gifts: [],
+    account: { customerKey: newCustomerKey() },
     ...newLive(),
   };
 }
@@ -95,6 +106,8 @@ export function migrate(raw: unknown): SaveData {
     monthly: { ...base.monthly, ...(d.monthly ?? {}) },
     expeditions: { ...(d.expeditions ?? {}) },
     regionRewards: [...(d.regionRewards ?? [])],
+    // v3 → v4: 구매 계정 키
+    account: d.account?.customerKey ? { ...d.account } : base.account,
     version: SAVE_VERSION,
   };
   // v1 → v2: 성장 기록(history) 필드 추가
@@ -477,7 +490,7 @@ export class GameState {
         if (!m) { needMount.push(def.mount); continue; }
         m.skin = id;
       } else if (def.kind === 'outfit') c.outfit = id;
-      else if (def.kind === 'decor') c.decor = [id];
+      else if (def.kind === 'decor') { if (!c.decor.includes(id)) c.decor = [...c.decor, id]; }
       else if (def.kind === 'trail') c.trail = id;
       equipped.push(id);
     }
@@ -490,7 +503,7 @@ export class GameState {
     if (!def || !this.ownsCosmetic(id)) return false;
     const c = this.data.cosmetics;
     if (def.kind === 'outfit') c.outfit = id;
-    else if (def.kind === 'decor') c.decor = c.decor.includes(id) ? c.decor.filter((x) => x !== id) : [id];
+    else if (def.kind === 'decor') c.decor = c.decor.includes(id) ? c.decor.filter((x) => x !== id) : [...c.decor, id]; // 장식은 여러 개 함께
     else if (def.kind === 'trail') c.trail = c.trail === id ? null : id;
     else if (def.kind === 'skin' && def.mount) {
       const m = this.data.mounts[def.mount];

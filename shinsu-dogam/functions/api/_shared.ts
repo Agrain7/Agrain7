@@ -1,9 +1,35 @@
-// Cloudflare Pages Functions 공용 (준비 상태 — 아직 배포/실결제 검증 안 됨)
-// 필요한 바인딩/환경변수: TOSS_SECRET_KEY (시크릿), ORDERS (KV 또는 D1/Supabase로 교체 가능)
+// Cloudflare Pages Functions 공용 (판매 빌드 서버). 배포·실결제 검증은 아직 하지 않음 — docs/DEPLOYMENT.md
+// 필요한 바인딩/환경변수 (Cloudflare 대시보드 → Pages → 설정):
+//  - TOSS_SECRET_KEY  (Secret) 토스페이먼츠 시크릿 키 — 코드·저장소에 절대 넣지 않는다
+//  - ADMIN_TOKEN      (Secret) 환불 처리용 관리자 토큰
+//  - ORDERS           (KV 네임스페이스) 주문·구매 기록
+export interface KVLike { get(k: string): Promise<string | null>; put(k: string, v: string): Promise<void> }
 export interface Env {
   TOSS_SECRET_KEY: string;
-  ORDERS: { get(k: string): Promise<string | null>; put(k: string, v: string): Promise<void> };
+  ADMIN_TOKEN?: string;
+  ORDERS: KVLike;
 }
+
+/** 계정당 하루 누적 결제 한도 (원, 미만). 토스 게임 업종 기준 안내 — 계약 시 재확인 */
+export const DAILY_LIMIT = 50000;
+/** 계정당 한 번만 살 수 있는 상품 */
+export const ONCE_PER_ACCOUNT = new Set(['p_pkg_first', 'p_pass_premium']);
+
+/** 구매 계정 키 (클라이언트 newCustomerKey 와 같은 형식) */
+export const validCustomerKey = (k: unknown): k is string => typeof k === 'string' && /^SD[0-9A-Z]{10,40}$/.test(k);
+
+/** 한국 시각 날짜 (하루 한도 계산) */
+export const kstDay = (t = Date.now()) => new Date(t + 9 * 3600_000).toISOString().slice(0, 10);
+
+export interface Purchase { orderId: string; productId: string; amount: number; at: number; status: 'paid' | 'refunded' }
+export async function readPurchases(kv: KVLike, customerKey: string): Promise<Purchase[]> {
+  const raw = await kv.get(`ent:${customerKey}`);
+  return raw ? (JSON.parse(raw) as Purchase[]) : [];
+}
+export async function writePurchases(kv: KVLike, customerKey: string, list: Purchase[]) {
+  await kv.put(`ent:${customerKey}`, JSON.stringify(list));
+}
+export const paidToday = (list: Purchase[], t = Date.now()) => list.filter((p) => p.status === 'paid' && kstDay(p.at) === kstDay(t)).reduce((a, p) => a + p.amount, 0);
 
 // 서버 기준 가격표 (클라이언트가 보낸 금액을 믿지 않는다) — src/data/products.ts 와 동기화 필요
 export const SERVER_PRICES: Record<string, { amount: number; name: string }> = {

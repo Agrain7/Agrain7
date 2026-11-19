@@ -4,6 +4,7 @@ import { loadFonts } from '../fonts.ts';
 import { addCanvas, ensureRider, ensureSky, generateCommon, loadSpriteOverrides, prewarmMonsters } from '../textures.ts';
 import { MONSTER_ART, monsterImageKey } from '../../data/monsterArt.ts';
 import { store } from '../ctx.ts';
+import { handlePaymentReturn, syncWithServer } from '../../services/payment/returnHandler.ts';
 import { GAME_W, GAME_H, AUTOTEST, DEBUG, START_STAGE } from '../config.ts';
 
 export class BootScene extends Phaser.Scene {
@@ -49,6 +50,11 @@ export class BootScene extends Phaser.Scene {
 
   private async boot() {
     await loadFonts();
+    // 판매 빌드: 결제창에서 돌아왔으면 서버 승인·지급, 그리고 서버 구매 기록과 맞추기
+    try {
+      store.payNotice = await handlePaymentReturn(store.state);
+      await syncWithServer(store.state);
+    } catch { /* 서버에 못 닿아도 게임은 계속 */ }
     // 받은 그림(프레임·배경)이 있으면 먼저 불러온다
     await loadSpriteOverrides(this);
     this.label.setText('영물의 기운을 모으는 중…');

@@ -1,6 +1,7 @@
 // 전역 상태 접근 (씬 간 공유)
 import { GameState, type StorageLike } from '../systems/state.ts';
 import { applyPlaytestGift, PLAYTEST_GIFT_ID } from '../systems/playtestGift.ts';
+import type { PayNotice } from '../services/payment/returnHandler.ts';
 
 function safeStorage(): StorageLike | null {
   try {
@@ -22,4 +23,6 @@ export const store = {
   storageAvailable: safeStorage() !== null,
   /** 이번 실행에서 플레이테스트 선물이 새로 지급되었는가 (타이틀에서 안내) */
   giftJustApplied: applyPlaytestGift(loaded, PLAYTEST_GIFT_ID),
+  /** 결제창에서 돌아온 결과 (타이틀에서 안내) */
+  payNotice: null as PayNotice | null,
 };

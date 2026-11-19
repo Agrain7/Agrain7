@@ -8,9 +8,10 @@ const js = readFileSync('dist-artifact/game.js', 'utf8').replace(/<\/script/gi, 
 mkdirSync('dist-artifact/assets/mounts', { recursive: true });
 for (const f of readdirSync('public/assets/mounts')) if (f.endsWith('.png')) copyFileSync(`public/assets/mounts/${f}`, `dist-artifact/assets/mounts/${f}`);
 // 몬스터 그림, 참고 화면 원경 파노라마, HUD 초상
-for (const dir of ['monsters', 'backgrounds', 'ui', 'scenery', 'rider']) {
-  mkdirSync(`dist-artifact/assets/${dir}`, { recursive: true });
-  for (const f of readdirSync(`public/assets/${dir}`)) if (f.endsWith('.png') || f.endsWith('.json')) copyFileSync(`public/assets/${dir}/${f}`, `dist-artifact/assets/${dir}/${f}`);
+for (const dir of ['monsters', 'backgrounds', 'ui', 'scenery', 'rider', 'legal']) {
+  const src = dir === 'legal' ? 'public/legal' : `public/assets/${dir}`, dst = dir === 'legal' ? 'dist-artifact/legal' : `dist-artifact/assets/${dir}`;
+  mkdirSync(dst, { recursive: true });
+  for (const f of readdirSync(src)) if (/\.(png|json|html)$/.test(f)) copyFileSync(`${src}/${f}`, `${dst}/${f}`);
 }
 // 받은 그림(프레임 시트·배경)도 함께
 cpSync('public/assets/sprites', 'dist-artifact/assets/sprites', { recursive: true });

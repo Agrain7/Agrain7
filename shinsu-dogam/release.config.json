@@ -1,0 +1,16 @@
+{
+  "version": "1.0.0",
+  "_설명": "판매 빌드 전에 아래 사업자 정보를 모두 채우세요. 빈 칸이 있으면 npm run release 가 실결제 빌드를 만들지 않습니다. (전자상거래법상 표시 의무 항목 — 출시 전 전문가 확인)",
+  "business": {
+    "name": "",
+    "ceo": "",
+    "regNo": "",
+    "mailOrderNo": "",
+    "address": "",
+    "email": "",
+    "phone": "",
+    "privacyOfficer": ""
+  },
+  "refundDays": 7,
+  "effectiveDate": ""
+}

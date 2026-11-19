@@ -19,7 +19,9 @@ export const COLORS = {
 };
 
 const q = typeof location !== 'undefined' ? new URLSearchParams(location.search) : new URLSearchParams();
-export const DEBUG = q.has('debug');
+const ENV = ((import.meta as unknown as { env?: Record<string, unknown> }).env ?? {}) as Record<string, unknown>;
+/** ?debug 치트(숫자키): 개발 서버와 허용한 빌드에서만 — 판매 빌드에서는 꺼짐 */
+export const DEBUG = q.has('debug') && (ENV.DEV === true || ENV.VITE_ALLOW_DEBUG === '1');
 export const AUTOTEST = q.has('autotest');
 /** 개발·테스트용: ?stage=1-3 으로 해당 구간을 바로 시작 (?debug 와 함께 사용) */
 export const START_STAGE = q.get('stage');

@@ -74,7 +74,7 @@ export const MOUNTS: Record<MountId, MountDef> = {
     stages: stages([
       { movement: mv({ runSpeed: 330, jumpVelocity: 760 }), attack: 'bite', special: 'galeClaw', abilities: ['빠른 지상 질주', '점프', '돌진'], body: { w: 64, h: 52 } },
       { movement: mv({ runSpeed: 370, jumpVelocity: 780, airJumps: 1, airJumpVelocity: 680 }), attack: 'claw', special: 'moonHowl', abilities: ['더 빠른 질주', '이단 점프', '월광 포효'], body: { w: 76, h: 60 } },
-      { movement: mv({ runSpeed: 410, jumpVelocity: 800, airJumps: 1, airJumpVelocity: 720, dash: { speed: 900, time: 0.22, cooldown: 0.7, air: true, damage: 0.8 } }), attack: 'claw', special: 'blueFlameSoul', abilities: ['최고 속도 질주', '이단 점프', '공격 돌진', '청염 늑대혼'], body: { w: 88, h: 66 } },
+      { movement: mv({ runSpeed: 410, jumpVelocity: 800, airJumps: 1, airJumpVelocity: 720, flight: { speed: 400, vertSpeed: 340 }, dash: { speed: 900, time: 0.22, cooldown: 0.7, air: true, damage: 0.8 } }), attack: 'claw', special: 'blueFlameSoul', abilities: ['구름 타고 자유 비행', '최고 속도 질주', '공격 돌진', '청염 늑대혼'], body: { w: 88, h: 66 } },
     ]),
   },
   hawk: {
@@ -85,7 +85,7 @@ export const MOUNTS: Record<MountId, MountDef> = {
     stages: stages([
       { movement: mv({ runSpeed: 280, jumpVelocity: 700, glide: { fallSpeed: 120, speedBonus: 1.15 } }), attack: 'peck', special: 'featherShot', abilities: ['활공 (점프 키 유지)', '깃털 날리기'], body: { w: 56, h: 50 } },
       { movement: mv({ runSpeed: 300, jumpVelocity: 720, airJumps: 2, airJumpVelocity: 560, glide: { fallSpeed: 95, speedBonus: 1.25 } }), attack: 'peck', special: 'galeFeathers', abilities: ['활공', '날갯짓 2회', '공중 회피'], body: { w: 64, h: 54 } },
-      { movement: mv({ runSpeed: 320, jumpVelocity: 740, airJumps: 4, airJumpVelocity: 580, glide: { fallSpeed: 70, speedBonus: 1.35 } }), attack: 'peck', special: 'skyDive', abilities: ['장시간 활공', '날갯짓 4회', '급강하', '높은 지역 접근'], body: { w: 76, h: 60 } },
+      { movement: mv({ runSpeed: 320, jumpVelocity: 740, airJumps: 1, airJumpVelocity: 580, glide: { fallSpeed: 70, speedBonus: 1.35 }, flight: { speed: 450, vertSpeed: 380 } }), attack: 'peck', special: 'skyDive', abilities: ['자유 비행', '장시간 활공', '급강하', '높은 지역 접근'], body: { w: 76, h: 60 } },
     ]),
   },
   cheongryong: {
@@ -118,7 +118,7 @@ export const MOUNTS: Record<MountId, MountDef> = {
     stages: stages([
       { movement: mv({ runSpeed: 340, jumpVelocity: 820 }), attack: 'claw', special: 'heavyClaw', abilities: ['빠른 달리기', '강한 도약'], body: { w: 66, h: 54 } },
       { movement: mv({ runSpeed: 380, jumpVelocity: 880, airJumps: 1, airJumpVelocity: 700 }), attack: 'claw', special: 'tigerLeap', abilities: ['이단 도약', '맹호 도약'], body: { w: 86, h: 62 } },
-      { movement: mv({ runSpeed: 420, jumpVelocity: 900, airJumps: 1, airJumpVelocity: 740, dash: { speed: 940, time: 0.22, cooldown: 0.7, air: true, damage: 1.0 } }), attack: 'claw', special: 'metalShock', abilities: ['돌진', '금강 충격파'], body: { w: 110, h: 70 } },
+      { movement: mv({ runSpeed: 420, jumpVelocity: 900, airJumps: 1, airJumpVelocity: 740, flight: { speed: 400, vertSpeed: 330 }, dash: { speed: 940, time: 0.22, cooldown: 0.7, air: true, damage: 1.0 } }), attack: 'claw', special: 'metalShock', abilities: ['구름 타고 자유 비행', '돌진', '금강 충격파'], body: { w: 110, h: 70 } },
     ]),
   },
   hyeonmu: {
@@ -129,7 +129,7 @@ export const MOUNTS: Record<MountId, MountDef> = {
     stages: stages([
       { movement: mv({ runSpeed: 240, jumpVelocity: 690, accel: 1600, airJumps: 1, airJumpVelocity: 580 }), attack: 'bite', special: 'waterShield', abilities: ['높은 방어력', '물방울 이단 점프', '물의 보호막'], body: { w: 66, h: 46 } },
       { movement: mv({ runSpeed: 260, jumpVelocity: 720, accel: 1700, airJumps: 1, airJumpVelocity: 640 }), attack: 'bite', special: 'tideShot', abilities: ['물살', '물방울 이단 점프', '수중 이동 (추후)'], body: { w: 90, h: 58 } },
-      { movement: mv({ runSpeed: 280, jumpVelocity: 760, accel: 1800, airJumps: 1, airJumpVelocity: 700 }), attack: 'bite', special: 'blackTortoiseWard', abilities: ['물방울 이단 점프', '현무 결계', '보호막'], body: { w: 120, h: 66 } },
+      { movement: mv({ runSpeed: 280, jumpVelocity: 760, accel: 1800, airJumps: 1, airJumpVelocity: 700, flight: { speed: 340, vertSpeed: 300 } }), attack: 'bite', special: 'blackTortoiseWard', abilities: ['물구름 타고 자유 비행', '물방울 이단 점프', '현무 결계', '보호막'], body: { w: 120, h: 66 } },
     ]),
   },
   girin: {
@@ -140,7 +140,7 @@ export const MOUNTS: Record<MountId, MountDef> = {
     stages: stages([
       { movement: mv({ runSpeed: 340, jumpVelocity: 900 }), attack: 'horn', special: 'natureBreath', abilities: ['높은 점프', '회복'], body: { w: 62, h: 58 } },
       { movement: mv({ runSpeed: 390, jumpVelocity: 960, airJumps: 1, airJumpVelocity: 760 }), attack: 'horn', special: 'auspiciousLight', abilities: ['빠른 질주', '이단 점프', '서기 광채'], body: { w: 84, h: 64 } },
-      { movement: mv({ runSpeed: 420, jumpVelocity: 1000, airJumps: 2, airJumpVelocity: 780 }), attack: 'horn', special: 'lifeLight', abilities: ['삼단 점프', '생명의 빛'], body: { w: 104, h: 70 } },
+      { movement: mv({ runSpeed: 420, jumpVelocity: 1000, airJumps: 1, airJumpVelocity: 780, flight: { speed: 430, vertSpeed: 360 } }), attack: 'horn', special: 'lifeLight', abilities: ['구름 타고 자유 비행', '이단 점프', '생명의 빛'], body: { w: 104, h: 70 } },
     ]),
   },
   haetae: {
@@ -151,7 +151,7 @@ export const MOUNTS: Record<MountId, MountDef> = {
     stages: stages([
       { movement: mv({ runSpeed: 290, jumpVelocity: 720 }), attack: 'horn', special: 'guardStance', abilities: ['방어', '수호의 자세'], body: { w: 66, h: 54 } },
       { movement: mv({ runSpeed: 320, jumpVelocity: 750 }), attack: 'horn', special: 'judgeRush', abilities: ['강력한 돌진', '반격'], body: { w: 90, h: 62 } },
-      { movement: mv({ runSpeed: 350, jumpVelocity: 780, airJumps: 1, airJumpVelocity: 640 }), attack: 'horn', special: 'haetaeJudgement', abilities: ['범위 공격', '해태의 심판'], body: { w: 120, h: 70 } },
+      { movement: mv({ runSpeed: 350, jumpVelocity: 780, airJumps: 1, airJumpVelocity: 640, flight: { speed: 380, vertSpeed: 320 } }), attack: 'horn', special: 'haetaeJudgement', abilities: ['구름 타고 자유 비행', '범위 공격', '해태의 심판'], body: { w: 120, h: 70 } },
     ]),
   },
   bonghwang: {
