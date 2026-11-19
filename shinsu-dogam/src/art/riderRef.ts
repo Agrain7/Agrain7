@@ -12,9 +12,11 @@ export interface RefRiderMeta { w: number; h: number; seat: [number, number]; ta
 const LINE = '#3a2420';
 /** 띠가 들어갈 왼쪽 여유 */
 const PAD_L = 120, PAD_T = 16, PAD_R = 24, PAD_B = 12;
+/** 몸을 안장 뒤쪽으로 (원본 px) — 앞으로 쏠려 영물 얼굴을 가리지 않게 */
+const BACK = 26;
 
 export function refRiderBox(m: RefRiderMeta): FrameBox {
-  return { w: m.w + PAD_L + PAD_R, h: m.h + PAD_T + PAD_B, ox: PAD_L + m.seat[0], oy: PAD_T + m.seat[1] };
+  return { w: m.w + PAD_L + PAD_R + BACK, h: m.h + PAD_T + PAD_B, ox: PAD_L + m.seat[0] + BACK, oy: PAD_T + m.seat[1] };
 }
 
 function hex(c: string): [number, number, number] {
@@ -77,16 +79,16 @@ export function drawRefRider(ctx: Ctx, p: Pose, m: RefRiderMeta, body: CanvasIma
   let lean = 0, bx = 0, by = 0;
   switch (p.anim) {
     case 'idle': lean = 0.6 * wave; by = -1.2 * Math.max(0, wave); break;
-    case 'run': lean = 6 + 2 * wave; by = -2.5 * Math.abs(Math.sin(t * TAU)); break;
-    case 'fly': lean = 9 + 1.5 * wave; by = -1.5 * wave; break;
-    case 'attack': lean = 11 * (p.i === 0 ? 0.6 : 1); bx = p.i === 0 ? 3 : 8; break;
+    case 'run': lean = 1.5 + 1.2 * wave; by = -2.5 * Math.abs(Math.sin(t * TAU)); break;
+    case 'fly': lean = 3 + 1 * wave; by = -1.5 * wave; break;
+    case 'attack': lean = 5 * (p.i === 0 ? 0.6 : 1); bx = p.i === 0 ? 1 : 3; break;
     case 'cast': lean = -4; by = -4 - 2 * wave; break;
     case 'hit': lean = -12; bx = -6; break;
     default: break;
   }
   const sx = m.seat[0], sy = m.seat[1];
   ctx.save();
-  ctx.translate(bx, by);
+  ctx.translate(bx - BACK, by);
   // 1) 뒤로 휘날리는 띠 (몸 뒤)
   if (o.extra !== 'armor') {
     const [wx, wy] = [m.waist[0] - sx, m.waist[1] - sy];

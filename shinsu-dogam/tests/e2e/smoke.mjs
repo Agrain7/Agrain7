@@ -121,7 +121,8 @@ try {
   const proj = await world(page, (w) => w.combat.projs.filter((p) => !p.hostile).length);
   check('원거리 공격 발사', proj >= 1, `투사체 ${proj}개`);
   await world(page, (w) => { w.player.ult = 100; return 1; });
-  await page.keyboard.press('v');
+  // 짧은 탭은 느린 헤드리스 프레임 사이에 놓칠 수 있어 잠깐 누르고 있는다
+  await page.keyboard.down('v'); await sleep(150); await page.keyboard.up('v');
   await sleep(2600);
   const ult = await world(page, (w) => ({ ult: Math.round(w.player.ult), freeze: w.freezeT <= 0, noCutin: !w.scene.get('Hud').children.list.some((o) => o.type === 'Text' && /월광참|깃털폭풍|뇌우|염화강림|금강포효|대해일|서광|심판화|천상광/.test(o.text ?? '')) }));
   check('필살기 발동 (게이지 소모, 글자·화면 멈춤 없음)', ult.ult < 30 && ult.freeze && ult.noCutin, JSON.stringify(ult));
@@ -160,10 +161,10 @@ try {
   }
   await world(page, (w, s) => { s.data.activeMount = 'hyeonmu'; w.player.rebuild(); w.player.body.reset(500, 800); return 1; });
   await sleep(700);
-  await page.keyboard.press('Space');
-  await sleep(260);
+  await page.keyboard.down('Space'); await sleep(120); await page.keyboard.up('Space');
+  await sleep(160);
   const j1 = await world(page, (w) => ({ air: w.player.airJumps, id: w.player.def.id, g: w.player.grounded }));
-  await page.keyboard.press('Space');
+  await page.keyboard.down('Space'); await sleep(120); await page.keyboard.up('Space');
   await sleep(250); // 헤드리스 렌더는 한 프레임이 길어 충분히 기다린다
   const j2 = await world(page, (w) => ({ air: w.player.airJumps, g: w.player.grounded }));
   check('현무 이단 점프', j1.id === 'hyeonmu' && !j1.g && j1.air === 1 && j2.air === 0, JSON.stringify({ j1, j2 }));

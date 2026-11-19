@@ -260,7 +260,7 @@ export function ensureRider(scene: Phaser.Scene, outfit: string): string {
     // 그림 높이(머리끝~발끝) 약 meta.h → 기존 라이더(약 105px)와 같은 화면 크기 기준
     riderMetas.set(key, {
       ox: box.ox / box.w, oy: box.oy / box.h,
-      scaleMul: 140 / meta.h,
+      scaleMul: 116 / meta.h,
       face: [box.ox - meta.seat[0] + meta.face[0], box.oy - meta.seat[1] + meta.face[1], meta.face[2]],
     });
     return key;
