@@ -18,6 +18,7 @@
   }
 """
 import numpy as np
+from scipy import ndimage
 from PIL import Image, ImageDraw, ImageFilter
 
 SS = 4  # 다각형·선 안티에일리어싱 배율
@@ -134,3 +135,52 @@ def whiten(rgba: np.ndarray, polys, fur=(248, 242, 231), ink=(128, 78, 42)) -> n
     alpha = np.clip(out[..., 3:4], 0, 1)
     rgb = np.where(alpha > 1e-3, out[..., :3] / np.maximum(alpha, 1e-3), 0)
     return (np.concatenate([np.clip(rgb, 0, 1), alpha], axis=2) * 255 + 0.5).astype(np.uint8)
+
+
+def patch(rgba: np.ndarray, items) -> np.ndarray:
+    """빈 곳 메우기: items = [{'poly': [(x,y)...], 'color': (r,g,b) | None, 'ink': True}]
+    color 가 없으면 다각형 둘레의 불투명 픽셀 색으로 안쪽을 번지듯 채운다 (OpenCV inpaint).
+    ink=True 면 새로 채운 부분이 바깥(투명)과 맞닿는 가장자리에 원화와 같은 갈색 먹선 1px."""
+    if not items:
+        return rgba
+    import cv2
+    out = rgba.copy()
+    h, w = out.shape[:2]
+    for it in items:
+        m = _mask(w, h, [it['poly']], blur=0.6)
+        sel = m > 0.5
+        if it.get('clear'):
+            # 그림 안에 남은 종이(배경) 지우기: 밝은 픽셀만 (외곽선은 남김)
+            lum = out[..., :3].astype(np.float32).mean(axis=2)
+            out[..., 3][sel & (lum > it.get('lum', 190))] = 0
+            continue
+        before = out[..., 3] > 128
+        if it.get('color') is not None:
+            col = np.zeros((h, w, 3), np.uint8)
+            col[:] = it['color']
+        else:
+            bgr = cv2.cvtColor(out[..., :3], cv2.COLOR_RGB2BGR)
+            hole = (sel & ~before).astype(np.uint8) * 255
+            col = cv2.cvtColor(cv2.inpaint(bgr, hole, 3, cv2.INPAINT_TELEA), cv2.COLOR_BGR2RGB)
+        fill = sel & ~before if not it.get('over') else sel
+        out[..., :3][fill] = col[fill]
+        a = out[..., 3].astype(np.float32)
+        out[..., 3] = np.maximum(a, m * 255).astype(np.uint8)
+        if it.get('ink', True):
+            now = out[..., 3] > 128
+            edge = now & ~ndimage.binary_erosion(now, iterations=1) & fill
+            out[..., :3][edge] = (128, 78, 42)
+    return out
+
+
+def drop_specks(rgba: np.ndarray, max_px: int = 6) -> np.ndarray:
+    """몸통에서 떨어진 1~6px 티끌 지우기"""
+    out = rgba.copy()
+    a = out[..., 3] > 40
+    lab, n = ndimage.label(a, structure=np.ones((3, 3)))
+    if n > 1:
+        sizes = ndimage.sum(a, lab, range(1, n + 1))
+        small = np.zeros(n + 1, bool)
+        small[1:] = sizes <= max_px
+        out[..., 3][small[lab]] = 0
+    return out

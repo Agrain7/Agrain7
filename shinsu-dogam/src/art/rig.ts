@@ -27,6 +27,10 @@ export interface BoneDef {
   feather?: number;
   /** 이 부위 아래에 가려진 몸 영역 → 인페인팅으로 채움 */
   fill?: V[];
+  /** 자동 이음매 받침 폭 (원화 짧은 변 대비, 기본 0.03): 몸통과 맞닿은 곳에서 이만큼 안쪽까지 몸통 색을 깔아 둔다 */
+  under?: number;
+  /** 받침을 깔 수 있는 범위: 축(pivot·사슬 뿌리)에서 이 거리(짧은 변 대비) 안만 → 귀·뿔처럼 멀리 뻗은 곳에 잔상이 생기지 않게 */
+  underReach?: number;
   motion: MotionFn;
 }
 
@@ -243,6 +247,34 @@ export function prepareRig(img: ImageData, def: RigDef): Prepared {
     const fm = blur(rasterPoly(w, h, b.fill), w, h, Math.max(1, Math.round(0.02 * minWH)));
     for (let i = 0; i < w * h; i++) fillMask[i] = Math.max(fillMask[i], fm[i]);
   }
+  let autoUnder: Float32Array | null = null;
+  // 자동 이음매 받침 (2026-11-21): 앞쪽 부위(z>=1)가 몸통과 맞닿는 곳 아래에 몸통 색을 이어 칠해 둔다.
+  // 부위가 돌거나 움직여 벌어져도 갈라진 틈(배경)이 보이지 않게. 몸통 윤곽을 '닫기'한 영역 안만 →
+  // 몸통에서 따로 뻗은 다리·장식 자리에는 칠하지 않아 잔상이 생기지 않는다.
+  {
+    const body = new Uint8Array(w * h);
+    for (let i = 0; i < w * h; i++) body[i] = rem[i] > 0.5 && src[i * 4 + 3] > 0.5 ? 1 : 0;
+    const R = Math.max(2, Math.round(0.06 * minWH));
+    const closed = erodeSq(dilateSq(body, w, h, R), w, h, R);
+    const grown = new Map<number, Uint8Array>();
+    const auto = new Float32Array(w * h);
+    def.bones.forEach((b, bi) => {
+      if ((b.z ?? 1) < 1) return; // 몸 뒤 부위(먼 쪽 다리·날개)는 몸통이 덮고 있으므로 제외
+      const rb = Math.max(2, Math.round((b.under ?? 0.03) * minWH));
+      if (!grown.has(rb)) grown.set(rb, dilateSq(body, w, h, rb));
+      const g = grown.get(rb)!;
+      const f = full[bi];
+      const pv = b.pivot ?? b.path?.[0];
+      const reach = b.underReach ? b.underReach * minWH : Infinity;
+      const pvx = pv ? pv[0] * w : 0, pvy = pv ? pv[1] * h : 0;
+      for (let i = 0; i < w * h; i++) {
+        if (body[i] || src[i * 4 + 3] <= 0.5 || f[i] <= 0.3) continue;
+        if (reach < Infinity) { const x = i % w, y = (i - x) / w; if ((x - pvx) ** 2 + (y - pvy) ** 2 > reach * reach) continue; }
+        if (g[i] || closed[i]) auto[i] = 1;
+      }
+    });
+    autoUnder = blur(auto, w, h, 1);
+  }
   const root = src.slice();
   let anyFill = false;
   for (let i = 0; i < w * h; i++) if (fillMask[i] > 0.01) { anyFill = true; break; }
@@ -266,6 +298,8 @@ export function prepareRig(img: ImageData, def: RigDef): Prepared {
       rem[i] = Math.max(rem[i], f);
     }
   }
+  // 받침은 원화 픽셀 그대로 (부위가 원래 있던 자리의 색 → 벌어져도 이음매가 티 나지 않고, 정지 자세는 원화와 같음)
+  if (autoUnder) for (let i = 0; i < w * h; i++) if (autoUnder[i] > 0.001 && src[i * 4 + 3] > 0.3) rem[i] = Math.max(rem[i], autoUnder[i]);
   // 층 만들기
   const layers: Layer[] = [];
   const rootC = crop(rem, w, h);
@@ -310,7 +344,32 @@ export function prepareRig(img: ImageData, def: RigDef): Prepared {
   return { w, h, src, root, layers };
 }
 
+/** 정사각 팽창/침식 (가로·세로 분리, 0/1 마스크) */
+function dilateSq(m: Uint8Array, w: number, h: number, r: number): Uint8Array {
+  const t = new Uint8Array(w * h), o = new Uint8Array(w * h);
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    let v = 0;
+    for (let k = Math.max(0, x - r); k <= Math.min(w - 1, x + r) && !v; k++) v = m[y * w + k];
+    t[y * w + x] = v;
+  }
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    let v = 0;
+    for (let k = Math.max(0, y - r); k <= Math.min(h - 1, y + r) && !v; k++) v = t[k * w + x];
+    o[y * w + x] = v;
+  }
+  return o;
+}
+function erodeSq(m: Uint8Array, w: number, h: number, r: number): Uint8Array {
+  const inv = new Uint8Array(w * h);
+  for (let i = 0; i < w * h; i++) inv[i] = m[i] ? 0 : 1;
+  const d = dilateSq(inv, w, h, r);
+  for (let i = 0; i < w * h; i++) d[i] = d[i] ? 0 : 1;
+  return d;
+}
+
 // ---------------- 프레임 렌더 ----------------
+/** 이음매 메우기 (개발 비교용으로 끌 수 있음: globalThis.__rigNoSeal = true) */
+const SEAL_OFF = () => (globalThis as { __rigNoSeal?: boolean }).__rigNoSeal === true;
 export interface RigJob {
   done: boolean;
   /** 남은 프레임을 budget(ms) 동안 렌더. 끝나면 결과 반환 */
@@ -339,6 +398,7 @@ export function rigJob(img: ImageData, def: RigDef, seat: V, counts: Partial<Rec
 
   const renderOne = (f: { anim: RigAnim; i: number; n: number }) => {
     const P = prep!;
+    const SEAL = !SEAL_OFF();
     const t = f.n > 1 ? f.i / f.n : 0;
     const gp = def.global?.(f.anim, t) ?? {};
     const G = local([foot[0] * w, foot[1] * h], { r: gp.r, x: gp.x, y: gp.y }, w, h);
@@ -368,7 +428,7 @@ export function rigJob(img: ImageData, def: RigDef, seat: V, counts: Partial<Rec
       if (!act.length) continue;
       for (let X = 0; X < fw; X++) {
         const px = X - padX + 0.5;
-        let rem = 1, ar = 0, ag = 0, ab = 0, aa = 0;
+        let rem = 1, ar = 0, ag = 0, ab = 0, aa = 0, wsum = 0;
         for (let q = 0; q < act.length; q++) {
           const li = act[q];
           const b = bb[li];
@@ -381,6 +441,7 @@ export function rigJob(img: ImageData, def: RigDef, seat: V, counts: Partial<Rec
           if (wx < 0 || wy < 0 || wx >= ly.bw || wy >= ly.bh) continue;
           const wt = ly.wts[wy * ly.bw + wx];
           if (wt <= 0.002) continue;
+          wsum += wt;
           // 쌍선형 표본 (premultiplied)
           const fx = sx - 0.5, fy = sy - 0.5;
           const x0 = Math.floor(fx), y0 = Math.floor(fy);
@@ -407,11 +468,18 @@ export function rigJob(img: ImageData, def: RigDef, seat: V, counts: Partial<Rec
           if (rem <= 0.003) break;
         }
         if (aa > 0.004) {
+          // 이음매 메우기: 부위가 서로 벌어지면 경계(부드러운 마스크)에서 가중치 합이 1보다 작아져 반투명 틈이 생긴다.
+          // 가중치 합으로 나눠 덮임을 되살린다 (합이 충분히 클 때만 → 다리가 떠난 빈자리에 잔상이 생기지 않음). 정지 자세에선 합=1 → 원화 그대로
+          let A = aa;
+          if (SEAL && wsum > 0.25 && wsum < 0.999) {
+            const u = Math.min(1, (wsum - 0.25) / 0.35);
+            A = Math.min(1, aa * (1 + (1 / wsum - 1) * u * u * (3 - 2 * u)));
+          }
           const o = (Y * fw + X) * 4;
           od[o] = (ar / aa) * 255;
           od[o + 1] = (ag / aa) * 255;
           od[o + 2] = (ab / aa) * 255;
-          od[o + 3] = aa * 255;
+          od[o + 3] = A * 255;
         }
       }
     }

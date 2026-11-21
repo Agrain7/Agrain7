@@ -22,11 +22,6 @@ interface Proj {
 const FX_TEX: Partial<Record<FxKind, string>> = { feather: 'fx_feather', fire: 'fx_fire', water: 'fx_water', light: 'fx_light' };
 const RING_TEX: Partial<Record<FxKind, string>> = { howl: 'fx_ring_white', shock: 'fx_ring_gold', fire: 'fx_ring_fire', water: 'fx_ring_blue', light: 'fx_ring_gold', spirit: 'fx_ring_blue', heal: 'fx_ring_gold' };
 
-/** 0xRRGGBB → [r, g, b] */
-function hexRgb(c: number): [number, number, number] {
-  return [(c >> 16) & 255, (c >> 8) & 255, c & 255];
-}
-
 export class Combat {
   projs: Proj[] = [];
   private dustEm: Phaser.GameObjects.Particles.ParticleEmitter;
@@ -184,6 +179,19 @@ export class Combat {
     audio.play(id === 'cheongryong' ? 'skill' : 'attack');
   }
 
+  /** 부드러운 화면 빛: 전체 화면을 꽉 채우는 카메라 섬광 대신 옅은 색막이 잠깐 (번쩍임에 민감한 사람을 위해 최대 밝기·횟수 제한) */
+  softFlash(color: number, alpha = 0.18, dur = 220) {
+    const sc = this.scene;
+    const now = sc.time.now;
+    // 0.25초 안에 다시 오면 약하게 (번개처럼 연달아 칠 때 깜빡임 누적 방지)
+    const a = now - this.lastFlashAt < 250 ? alpha * 0.35 : alpha;
+    this.lastFlashAt = now;
+    const cam = sc.cameras.main;
+    const r = sc.add.rectangle(0, 0, cam.width, cam.height, color, 1).setOrigin(0).setScrollFactor(0).setDepth(40).setAlpha(Math.min(0.3, a));
+    sc.tweens.add({ targets: r, alpha: 0, duration: dur, ease: 'Quad.out', onComplete: () => r.destroy() });
+  }
+  private lastFlashAt = -9999;
+
   /** 필살기 */
   ultimate(p: Player) {
     const id = p.def.id as MountId;
@@ -194,7 +202,7 @@ export class Combat {
     p.atkAnimT = 0.3;
     // 글자·화면 멈춤 없이 효과만 (사용자 요청) — 기운이 모이는 고리 후 바로 발동
     this.ring(p.x, p.y, 'fx_ring_gold', 1.6, 260);
-    this.scene.cameras.main.flash(120, ...hexRgb(U.color));
+    this.softFlash(U.color, 0.2, 180);
     audio.play('evolve');
     this.scene.time.delayedCall(140, () => this.runUltimate(p, id));
   }
@@ -220,7 +228,7 @@ export class Combat {
     const U = ULTS[id];
     const targets = () => this.onScreen();
     const groundAt = (x: number) => sc.groundY(x) ?? p.bottom;
-    cam.flash(140, (U.color >> 16) & 255, (U.color >> 8) & 255, U.color & 255);
+    this.softFlash(U.color, 0.16, 240);
     switch (id) {
       case 'wolf': {
         const moon = sc.add.image(p.x + p.facing * 200, v.y + 160, 'moon_ult').setDepth(5).setAlpha(0).setScale(0.6);
@@ -251,13 +259,18 @@ export class Combat {
         break;
       }
       case 'cheongryong': {
-        const dark = sc.add.rectangle(v.x, v.y, v.width, v.height, 0x0a1428, 0).setOrigin(0).setDepth(4);
+        // 화면에 고정 (카메라가 따라 움직여도 먹구름·어둠·비가 화면 밖으로 밀려나지 않게)
+        const dark = sc.add.rectangle(0, 0, cam.width, cam.height, 0x0a1428, 0).setOrigin(0).setDepth(4).setScrollFactor(0);
         sc.tweens.add({ targets: dark, fillAlpha: 0.45, duration: 250, yoyo: true, hold: 1700, onComplete: () => dark.destroy() });
-        for (let c = 0; c < 3; c++) {
-          const cl = sc.add.image(v.x + 220 + c * 420, v.y + 70, 'fx_storm').setDepth(6).setAlpha(0);
-          sc.tweens.add({ targets: cl, alpha: 1, duration: 300, yoyo: true, hold: 1600, onComplete: () => cl.destroy() });
+        // 먹구름: 화면 위를 겹겹이 덮고 천천히 흘러감 (앞 줄은 크고 진하게, 뒷줄은 옅게)
+        for (let c = 0; c < 4; c++) {
+          const back = c % 2 === 1;
+          const cl = sc.add.image(120 + c * 360, back ? 78 : 108, 'fx_storm').setDepth(back ? 5 : 6).setAlpha(0).setScrollFactor(0)
+            .setScale(back ? 0.9 : 1.15).setFlipX(c % 2 === 0);
+          sc.tweens.add({ targets: cl, alpha: back ? 0.75 : 1, duration: 320, yoyo: true, hold: 1600, onComplete: () => cl.destroy() });
+          sc.tweens.add({ targets: cl, x: cl.x + (back ? 40 : 70), duration: 2200 });
         }
-        const rain = sc.add.particles(0, 0, 'fx_rain', { x: { min: v.x, max: v.right + 200 }, y: v.y - 40, speedY: { min: 1100, max: 1400 }, speedX: -160, rotate: 8, lifespan: 650, alpha: 0.7, quantity: 3, frequency: 25 }).setDepth(7);
+        const rain = sc.add.particles(0, 0, 'fx_rain', { x: { min: 0, max: cam.width + 200 }, y: -40, speedY: { min: 1100, max: 1400 }, speedX: -160, rotate: 8, lifespan: 650, alpha: 0.7, quantity: 3, frequency: 25 }).setDepth(7).setScrollFactor(0);
         sc.time.delayedCall(2000, () => rain.destroy());
         for (let k = 0; k < 12; k++) sc.time.delayedCall(250 + k * 130, () => {
           const ts = targets();
@@ -487,7 +500,10 @@ export class Combat {
     b.setScale(1, Math.min(1.4, (groundY - this.scene.cameras.main.worldView.y + 40) / 520));
     this.ring(x, groundY, 'fx_ring_blue', 0.5);
     this.scene.tweens.add({ targets: b, alpha: 0, duration: 260, delay: 60, onComplete: () => b.destroy() });
-    this.scene.cameras.main.flash(60, 180, 230, 255, false);
+    // 화면 전체 번쩍임 대신: 떨어진 자리에 번지는 빛 + 아주 옅은 화면 빛
+    const glow = this.scene.add.image(x, groundY - 30, 'wisp_gold').setDepth(13).setBlendMode(Phaser.BlendModes.ADD).setTint(0xbfe8ff).setScale(5).setAlpha(0.85);
+    this.scene.tweens.add({ targets: glow, alpha: 0, scale: 8, duration: 320, onComplete: () => glow.destroy() });
+    this.softFlash(0xb4e6ff, 0.08, 120);
   }
 
   dashHits(p: Player) {

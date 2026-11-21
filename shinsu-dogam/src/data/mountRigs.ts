@@ -56,7 +56,7 @@ function wing(id: string, poly: V[], pivot: V, o: WingOpt): BoneDef[] {
 type ChainOpt = { amp?: number; runAmp?: number; flyAmp?: number; lag?: number; z?: number; parent?: string; fill?: V[]; f?: number };
 function chain(id: string, poly: V[], path: V[], o: ChainOpt = {}): BoneDef {
   return {
-    id, poly, path, z: o.z ?? 1, parent: o.parent, fill: o.fill, feather: 0.018,
+    id, poly, path, z: o.z ?? 1, parent: o.parent, fill: o.fill, feather: 0.018, under: 0.06, underReach: 0.22,
     motion: (a: RigAnim, t: number, seg: number, segs: number): Pose => {
       const amp = a === 'idle' ? (o.amp ?? 6) : a === 'fly' ? (o.flyAmp ?? (o.amp ?? 6) * 2.2) : (o.runAmp ?? (o.amp ?? 6) * 1.6);
       const g = Math.pow((seg + 1) / segs, 0.7);
@@ -67,7 +67,7 @@ function chain(id: string, poly: V[], path: V[], o: ChainOpt = {}): BoneDef {
 
 function head(id: string, poly: V[], pivot: V): BoneDef {
   return {
-    id, poly, pivot, z: 2, feather: 0.012,
+    id, poly, pivot, z: 2, feather: 0.012, under: 0.1, underReach: 0.24,
     motion: (a: RigAnim, t: number): Pose => {
       switch (a) {
         case 'idle': return { r: 1.6 * sin(t, 0.2) };

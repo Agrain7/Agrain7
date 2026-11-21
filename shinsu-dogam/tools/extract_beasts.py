@@ -79,7 +79,39 @@ WHITEN = {
 }
 
 
-def process(img: np.ndarray, cfg) -> np.ndarray:
+# 추가 손질 (추출된 PNG 좌표): 다각형 안을 주변 색으로 메우고 바깥 테두리에 먹선 — retouch.patch
+FUR = (248, 242, 231)
+PATCH: dict = {
+    # 백호: 입을 다물게 한 뒤 턱 뒤(목)가 비어 배경이 보이던 곳 + 입술 사이 틈 → 흰 털로 채우고 바깥 먹선 (사용자: "백호 입도 비어있다")
+    ('baekho', 0): [
+        {'poly': [(86, 60), (92, 61.5), (96, 64), (97, 68), (95, 71.5), (91, 73.5), (87, 73), (85.5, 67)], 'color': FUR},
+        {'poly': [(90, 58.5), (98, 59.5), (104, 59), (106, 62), (100, 64.5), (93, 64)], 'color': FUR, 'ink': False},
+    ],
+    ('baekho', 1): [
+        {'poly': [(144, 63), (151, 62.5), (157, 66), (160, 71), (159, 74), (154, 74.5), (148, 73), (144.5, 69)], 'color': FUR},
+        {'poly': [(152, 60.5), (162, 61.5), (170, 61), (175, 60), (174, 66), (166, 69), (158, 69), (152, 67.5)], 'color': FUR, 'ink': False},
+    ],
+    ('baekho', 2): [
+        {'poly': [(247, 78), (256, 79), (260, 82), (259, 87), (254, 90), (248, 90), (245.5, 85)], 'color': FUR},
+        {'poly': [(269, 62.5), (280, 63.5), (288, 61.5), (293, 61.5), (292, 67), (285, 70), (276, 70), (269.5, 68.5)], 'color': FUR, 'ink': False},
+    ],
+    # 청룡 성장체: 원화에서 종이색 위에 선으로만 그린 등 갈기·왼쪽 털 뭉치 → 게임 배경 위에서 비어 보여 흰 털로 받침 (선은 그대로)
+    ('cheongryong', 1): [
+        {'poly': [(55, 99), (62, 93), (72, 94), (80, 91), (90, 93), (100, 95), (108, 100), (104, 107), (92, 107), (80, 108), (66, 110), (56, 107)], 'color': FUR, 'ink': False},
+        {'poly': [(9, 73), (14, 65), (24, 61), (34, 63), (42, 67), (47, 73), (45, 80), (37, 84), (27, 84), (17, 82), (11, 78)], 'color': FUR, 'ink': False},
+    ],
+    # 원본 도감에서 옆 그림 조각이 가장자리에 딸려 온 것 지우기
+    ('wolf', 1): [{'poly': [(0, 12), (8, 12), (8, 28), (0, 28)], 'clear': True, 'lum': -1}],
+    ('hawk', 1): [{'poly': [(0, 0), (6, 0), (6, 34), (0, 34)], 'clear': True, 'lum': -1}],
+    # 현무 유체: 꼬리 고리 안에 남은 종이색 → 투명 (뒤 배경이 보여야 하는 곳)
+    ('hyeonmu', 0): [{'poly': [(29, 22), (30, 14), (36, 10.5), (46, 9.5), (53, 11.5), (56.5, 17), (56.5, 22), (45, 21), (36, 21)], 'clear': True}],
+}
+
+
+def process(img: np.ndarray, cfg, barrier: bool = False, ref_bbox=None):
+    """barrier: 원화의 먹선(외곽선)을 벽으로 삼아, 종이색과 비슷한 흰 털·갈기가 외곽선의 작은 틈으로 새어
+    배경과 함께 지워지지 않게 한다 (청룡 갈기·기린 갈기 등 '빈 부분' 수정, 2026-11-21).
+    ref_bbox: 잘라낼 상자를 이 값으로 고정 (예전 출력과 같은 크기 → 리깅 좌표 유지). 반환: (rgba, bbox)"""
     x0, y0, x1, y1 = cfg['box']
     crop = img[y0:y1, x0:x1].astype(np.float32)
     h, w, _ = crop.shape
@@ -98,9 +130,18 @@ def process(img: np.ndarray, cfg) -> np.ndarray:
     warm_gray = (r >= g - 4) & (g >= b - 6) & ((r - b) < 60) & (lum > 150)
     bg_like = (dist < T_BG) | ((dist < SHADOW_MAX) & warm_gray)
     # 가장자리와 연결된 배경만 제거 (그림 내부의 흰 털은 보존)
-    lab, n = ndimage.label(bg_like)
+    wall = np.zeros_like(bg_like)
+    if barrier:
+        bg_lum = float(np.median(np.concatenate([lum[0], lum[-1], lum[:, 0], lum[:, -1]])))
+        ink = (lum < bg_lum - 58) | (dist > 105)
+        wall = ndimage.binary_dilation(ink, iterations=1)
+    lab, n = ndimage.label(bg_like & ~wall)
     edge_labels = set(np.unique(np.concatenate([lab[0], lab[-1], lab[:, 0], lab[:, -1]]))) - {0}
     bg_mask = np.isin(lab, list(edge_labels))
+    if barrier:
+        # 벽(먹선을 1px 넓힌 띠) 위의 종이색 픽셀 중 바깥 배경과 맞닿은 것만 배경으로 — 털 안쪽으로는 번지지 않음
+        for _ in range(2):
+            bg_mask |= bg_like & wall & ndimage.binary_dilation(bg_mask)
     fg = ~bg_mask
     # 작은 잡티 제거 + 주 덩어리와 멀리 떨어진 조각 제거
     lab2, n2 = ndimage.label(fg)
@@ -170,10 +211,13 @@ def process(img: np.ndarray, cfg) -> np.ndarray:
     rgba = np.dstack([col, alpha * 255]).astype(np.uint8)
     # 투명 여백 잘라내기 (+여백 2px)
     ys, xs = np.where(alpha > 0.05)
-    if len(xs):
-        rgba = rgba[max(0, ys.min() - 2):ys.max() + 3, max(0, xs.min() - 2):xs.max() + 3]
+    bbox = ref_bbox
+    if bbox is None and len(xs):
+        bbox = (max(0, ys.min() - 2), ys.max() + 3, max(0, xs.min() - 2), xs.max() + 3)
+    if bbox is not None:
+        rgba = rgba[bbox[0]:bbox[1], bbox[2]:bbox[3]]
     # 오른쪽을 바라보도록 좌우 반전 (원본은 모두 왼쪽을 바라봄)
-    return rgba[:, ::-1]
+    return rgba[:, ::-1], bbox
 
 
 def main():
@@ -182,11 +226,15 @@ def main():
     meta = {}
     tiles = []
     for (bid, stage), cfg in BEASTS.items():
-        rgba = process(img, cfg)
+        # 크기(잘라낼 상자)는 예전 방식으로 정하고, 그림은 먹선 벽 방식으로 (리깅 좌표가 그대로 맞게)
+        _, bbox = process(img, cfg, barrier=False)
+        rgba, _ = process(img, cfg, barrier=cfg.get('barrier', True), ref_bbox=bbox)
         if (bid, stage) in WHITEN:
             rgba = retouch.whiten(np.ascontiguousarray(rgba), WHITEN[(bid, stage)])
         if (bid, stage) in MOUTHS:
             rgba = retouch.close_mouth(np.ascontiguousarray(rgba), MOUTHS[(bid, stage)])
+        rgba = retouch.patch(np.ascontiguousarray(rgba), PATCH.get((bid, stage), []))
+        rgba = retouch.drop_specks(rgba)
         im = Image.fromarray(rgba, 'RGBA')
         name = f'{bid}_{stage}.png'
         im.save(os.path.join(OUT, name), optimize=True)

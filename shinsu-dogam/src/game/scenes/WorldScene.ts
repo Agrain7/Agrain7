@@ -290,7 +290,7 @@ export class WorldScene extends Phaser.Scene {
     this.player.locked = true;
     audio.stopMusic();
     audio.play('evolve');
-    this.cameras.main.flash(600, 255, 245, 220);
+    this.combat.softFlash(0xfff5dc, 0.3, 700);
     this.tweens.add({ targets: b.spr, alpha: 0, duration: 2200, delay: 600 });
     this.time.addEvent({ delay: 120, repeat: 18, callback: () => this.combat.sparks(b.x + Phaser.Math.Between(-80, 80), b.y + Phaser.Math.Between(-80, 40), 8) });
     const R = regionOf(this.map.id);
@@ -505,7 +505,7 @@ export class WorldScene extends Phaser.Scene {
         st.completeQuest('q_pearls');
         st.claimQuest('q_pearls');
         audio.play('pearl');
-        this.cameras.main.flash(500, 190, 240, 255);
+        this.combat.softFlash(0xbef0ff, 0.25, 500);
       } else if (this.shrineMsgT <= 0) {
         this.shrineMsgT = 3;
         this.hudMsg(`용신 사당: 여의주 조각 ${n}/3 — 월하산맥 곳곳을 찾아보자`, '#bfe9ff');

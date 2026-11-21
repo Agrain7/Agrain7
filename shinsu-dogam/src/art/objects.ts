@@ -663,12 +663,67 @@ export function paintFireColumn(): HTMLCanvasElement {
 
 /** 먹구름 (청룡 필살기) */
 export function paintStormCloud(): HTMLCanvasElement {
-  const [c, ctx] = makeCanvas(420, 160);
-  const r = rng(5);
-  for (let i = 0; i < 16; i++) ellipse(ctx, 40 + r() * 340, 60 + r() * 60, 50 + r() * 50, 30 + r() * 25, 0, rgba(r() < 0.5 ? '#2a3050' : '#3a4266', 0.85));
-  ctx.strokeStyle = 'rgba(160,220,255,0.5)';
-  ctx.lineWidth = 2;
-  for (let i = 0; i < 5; i++) { ctx.beginPath(); ctx.arc(80 + i * 60, 90, 14, Math.PI * 0.2, Math.PI * 1.7); ctx.stroke(); }
+  // 먹구름 (청룡 뇌우): 겹겹이 부푼 구름 덩이 — 위쪽은 달빛을 받아 테두리가 밝고, 아래는 평평하게 어둡게 번진다
+  const W = 560, H = 200;
+  const [c, ctx] = makeCanvas(W, H);
+  const r = rng(11);
+  const lobes: [number, number, number][] = [];
+  for (let i = 0; i < 11; i++) {
+    const x = 50 + (i / 10) * (W - 100) + (r() - 0.5) * 30;
+    const big = 1 - Math.abs(i - 5) / 7;
+    lobes.push([x, 108 - big * 34 - r() * 14, 38 + big * 30 + r() * 12]);
+  }
+  for (let i = 0; i < 6; i++) lobes.push([90 + r() * (W - 180), 128 + r() * 10, 30 + r() * 16]);
+  // 1) 그림자 덩어리 (아래로 갈수록 투명)
+  ctx.save();
+  for (const [x, y, rr] of lobes) {
+    const g = ctx.createRadialGradient(x - rr * 0.25, y - rr * 0.35, rr * 0.15, x, y, rr);
+    g.addColorStop(0, '#56628e');
+    g.addColorStop(0.55, '#2f3758');
+    g.addColorStop(1, 'rgba(24,28,48,0.0)');
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(x, y, rr, 0, TAU); ctx.fill();
+  }
+  // 몸통을 이어 주는 평평한 바닥 띠
+  const base = ctx.createLinearGradient(0, 96, 0, 176);
+  base.addColorStop(0, 'rgba(36,42,70,0.92)');
+  base.addColorStop(0.7, 'rgba(28,32,54,0.75)');
+  base.addColorStop(1, 'rgba(28,32,54,0)');
+  ctx.fillStyle = base;
+  ctx.beginPath();
+  ctx.moveTo(40, 120); ctx.quadraticCurveTo(W / 2, 92, W - 40, 120); ctx.lineTo(W - 20, 170); ctx.quadraticCurveTo(W / 2, 182, 20, 170); ctx.closePath();
+  ctx.fill();
+  ctx.restore();
+  // 2) 위쪽 테두리 빛 (달빛 받은 가장자리)
+  ctx.save();
+  ctx.globalCompositeOperation = 'source-atop';
+  for (const [x, y, rr] of lobes.slice(0, 11)) {
+    const g = ctx.createRadialGradient(x - rr * 0.35, y - rr * 0.55, 1, x - rr * 0.2, y - rr * 0.4, rr * 0.75);
+    g.addColorStop(0, 'rgba(176,196,236,0.55)');
+    g.addColorStop(1, 'rgba(176,196,236,0)');
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(x, y, rr, 0, TAU); ctx.fill();
+  }
+  // 3) 속에서 번지는 번갯빛 두어 곳
+  for (const [x, y] of [[W * 0.32, 112], [W * 0.7, 104]]) {
+    const g = ctx.createRadialGradient(x, y, 2, x, y, 46);
+    g.addColorStop(0, 'rgba(190,232,255,0.45)');
+    g.addColorStop(1, 'rgba(190,232,255,0)');
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(x, y, 46, 0, TAU); ctx.fill();
+  }
+  ctx.restore();
+  // 4) 구름 결: 가는 곡선 몇 줄 (원 모양 기호가 아니라 결을 따라 흐르는 선)
+  ctx.save();
+  ctx.globalCompositeOperation = 'source-atop';
+  ctx.strokeStyle = 'rgba(150,170,214,0.35)';
+  ctx.lineWidth = 1.6;
+  ctx.lineCap = 'round';
+  for (let i = 0; i < 7; i++) {
+    const x0 = 70 + r() * (W - 200), y0 = 92 + r() * 40, len = 50 + r() * 60;
+    ctx.beginPath(); ctx.moveTo(x0, y0); ctx.bezierCurveTo(x0 + len * 0.3, y0 - 10, x0 + len * 0.7, y0 - 8, x0 + len, y0 + 2); ctx.stroke();
+  }
+  ctx.restore();
   return c;
 }
 

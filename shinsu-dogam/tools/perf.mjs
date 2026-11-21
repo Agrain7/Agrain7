@@ -40,14 +40,14 @@ const grantAll = `(() => { const st = window.__SD__.store.state; const now = Dat
     loop.stop(); // 실제 rAF 대신 직접 120Hz 로 돌린다
     const w = g.scene.getScene('World');
     w.monsters.forEach((m) => m.destroy()); w.monsters = [];
-    w.player.body.reset(400, 800);
+    w.player.body.reset(100, 800); // 140+120프레임 달려도 1-2의 첫 턱(x 1300)에 닿지 않게
     const ctl = (await import('/src/game/controls.ts').catch(() => null))?.controls;
     let t = performance.now();
     const step = () => { t += 1000 / 120; loop.step(t); };
     // 달리기 시작 (가상 입력: 키보드 이벤트 대신 컨트롤 직접)
     const press = (v) => { const k = w.input.keyboard; const key = k.addKey('D'); key.isDown = v; };
     press(true);
-    for (let i = 0; i < 120; i++) step(); // 가속
+    for (let i = 0; i < 140; i++) step(); // 가속 + 화면 주사율 다시 재기(90프레임 창이 모두 120Hz 로 채워지도록)
     const xs = [], cams = [];
     for (let i = 0; i < 120; i++) { step(); xs.push(w.player.vis.x); cams.push(w.cameras.main.scrollX); }
     press(false);
